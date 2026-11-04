@@ -56,6 +56,27 @@ def valid_status(compiled=False):
 
 
 class ContractTests(unittest.TestCase):
+    def test_font_alias_cases_and_prelaunch_guards_are_required(self):
+        for index in (8, 9, 10):
+            status = valid_status()
+            status["cases"][index]["ok"] = False
+            with self.subTest(case=index), self.assertRaises(ValueError):
+                runner.validate_status(status, CONTRACT, False)
+        for key in ("hostContext", "virtualBefore", "physicalAfter", "fileHelper", "folderHelper"):
+            status = valid_status()
+            status["fontPaths"][0][key] = False
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                runner.validate_status(status, CONTRACT, False)
+        for key in ("aliasRequestsUnchanged", "aliasOutputMatches", "pathHandlerRestored"):
+            status = valid_status()
+            status[key] = False
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                runner.validate_status(status, CONTRACT, False)
+        status = valid_status()
+        status["invalidFontPaths"][0]["exitCode"] = 0
+        with self.assertRaises(ValueError):
+            runner.validate_status(status, CONTRACT, False)
+
     def test_semantic_nondeterministic_cases_require_real_values_and_patterns(self):
         contract = {"schema": 1, "feature": {
             "casesPath": "/cases", "caseCount": 1,
@@ -291,6 +312,15 @@ class HostRunnerTests(unittest.TestCase):
             self.assertEqual(font.read_bytes(), b"unit test font " + font.name.encode())
         self.assertTrue((Path(request["fontFile"]).parent / "NotoSerif-LICENSE.txt").is_file())
         self.assertTrue((Path(request["fontCFF"]).parent / "NotoSansJP-LICENSE.txt").is_file())
+        for label, alias in (("Data", "DATA"), ("Resources", "RESOURCES")):
+            font = Path(request["fontFile" + label])
+            self.assertEqual(font.parent.parent, host / label)
+            self.assertIn("日本語", font.parent.name)
+            self.assertIn(" ", font.parent.name)
+            self.assertEqual(font.read_bytes(), b"unit test font " + font.name.encode())
+            self.assertEqual(request["fontAlias" + label],
+                             "/" + alias + "/" + font.relative_to(host / label).as_posix())
+            self.assertTrue((font.parent / "NotoSerif-LICENSE.txt").is_file())
         self.assertEqual((host / "Components" / (self.config["repository"] + ".4dbase") / "marker").read_text(),
                          "release" if request["expectCompiled"] else "source")
         if not request["expectCompiled"]:

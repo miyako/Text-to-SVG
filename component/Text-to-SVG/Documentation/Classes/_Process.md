@@ -11,8 +11,19 @@ object-instance checks; plain Objects are also rejected. They return
 `quote(argument : Text) : Text` always quotes one argument. macOS double quotes
 escape backslashes and quotes; Windows follows the CRT backslash-before-quote
 and trailing-backslash rules. This is 4D command-line parsing, not a shell.
-The executable is a physical POSIX File path as required by SystemWorker.
+The executable uses a physical POSIX path on macOS and native platform path on Windows.
 Native 4D round-trip tests, not shell tests, are necessary on each platform.
+
+`expand(entry)` reconstructs a validated File or Folder with
+`OB Class(entry).new(entry.platformPath; fk platform path)`.
+`nativePath(entry)` uses that expanded object's `.path` on macOS or
+`.platformPath` on Windows. Execution reuses these internal helpers for the
+executable and File/Folder arguments. Expansion preserves the already
+constructed object's class and context; as in llama-cpp's `expand`, it is not
+itself a context selector. Construct a host-context object inside a component
+with `File(path; pathType; *)` or `Folder(path; pathType; *)` before expanding it.
+`TextOutline` does this for font paths. The bundled executable's `/RESOURCES`
+object is deliberately constructed without `*` in component scope.
 
 Options: `dataType:"text"`, `encoding:"UTF-8"`, `hideWindow:true`,
 `timeout:30`, `currentDirectory:file.parent`. Optional nonempty UTF-8 Text input

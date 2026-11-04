@@ -37,5 +37,4 @@ Function execute($arguments : Collection; $stdin : Text)->$result : Object
 	If (Not($file.exists))
 		return New object("ok"; False; "error"; New object("code"; "missing_executable"; "message"; $file.path))
 	End if
-	$file:=File($file.platformPath; fk platform path)
 	$result:=cs._Process.new().execute($file; $arguments; $stdin)

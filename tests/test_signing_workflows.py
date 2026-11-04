@@ -13,6 +13,18 @@ SECRETS = (
 
 
 class SigningWorkflowTests(unittest.TestCase):
+    def test_build_only_host_opt_in_cannot_enable_release_or_signing(self):
+        ci = (WORKFLOWS / "ci.yml").read_text()
+        self.assertIn("run_4d:", ci)
+        self.assertIn("vars.FOURD_ENABLED == 'true' || inputs.run_4d", ci)
+        self.assertIn("name: compiled-validation", ci)
+        self.assertIn('shutil.copy2(ROOT / "build/host-status.json"', ci)
+        self.assertNotIn("secrets.", ci)
+        self.assertNotIn("sign_release.py", ci)
+        self.assertNotIn("--publish", ci)
+        release = (WORKFLOWS / "release.yml").read_text()
+        self.assertNotIn("inputs.run_4d", release)
+
     def test_published_verification_is_pinned_secret_free_and_read_only(self):
         workflow = (WORKFLOWS / "verify-prerelease.yml").read_text()
         self.assertIn("contents: read", workflow)

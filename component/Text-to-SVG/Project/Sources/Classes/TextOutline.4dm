@@ -4,12 +4,22 @@ Class constructor($target : Text)
 	This._cli:=cs._CLI.new("text-to-svg"; $target)
 
 Function convert($request : Object)->$result : Object
-	var $copy : Object
+	var $copy; $fontPath : Object
 	var $input; $previous : Text
 	var $errors : Collection
 	var CLI_LastErrors : Collection
 	If ($request=Null)
 		return New object("ok"; False; "error"; New object("code"; "invalid_argument"; "message"; "Conversion request is required"))
+	End if
+	If (Value type($request.fontFile)#Is text)
+		return New object("ok"; False; "error"; New object("code"; "invalid_argument"; "message"; "fontFile must be nonempty Text without NUL"))
+	End if
+	If (($request.fontFile="") | (Position(Char(0); $request.fontFile; *)>0))
+		return New object("ok"; False; "error"; New object("code"; "invalid_argument"; "message"; "fontFile must be nonempty Text without NUL"))
+	End if
+	$fontPath:=This._fontPath($request.fontFile)
+	If (Not($fontPath.ok))
+		return $fontPath
 	End if
 	$previous:=Method called on error(ek local)
 	CLI_LastErrors:=Null
@@ -17,6 +27,7 @@ Function convert($request : Object)->$result : Object
 	$copy:=OB Copy($request)
 	If ($copy#Null)
 		$copy.protocol:=1
+		$copy.fontFile:=$fontPath.value
 		$input:=JSON Stringify($copy)
 	End if
 	ON ERR CALL($previous; ek local)
@@ -26,6 +37,31 @@ Function convert($request : Object)->$result : Object
 		return New object("ok"; False; "error"; New object("code"; "invalid_argument"; "message"; "Conversion request must be JSON serializable"; "details"; $errors))
 	End if
 	$result:=This._decode(This._cli.execute(New collection("convert"); $input); "convert")
+
+Function _fontPath($path : Text)->$result : Object
+	var $file : 4D.File
+	var $kind : Integer
+	var $native; $previous : Text
+	var $errors : Collection
+	var CLI_LastErrors : Collection
+	$kind:=fk posix path
+	If (Substring($path; 1; 1)#"/")
+		$kind:=fk platform path
+	End if
+	$previous:=Method called on error(ek local)
+	CLI_LastErrors:=Null
+	ON ERR CALL("_CaptureError"; ek local)
+	$file:=File($path; $kind; *)
+	If ($file#Null)
+		$native:=cs._Process.new().nativePath($file)
+	End if
+	ON ERR CALL($previous; ek local)
+	$errors:=CLI_LastErrors
+	CLI_LastErrors:=Null
+	If (($errors#Null) | ($native=""))
+		return New object("ok"; False; "error"; New object("code"; "invalid_argument"; "message"; "fontFile path could not be resolved"; "details"; $errors))
+	End if
+	$result:=New object("ok"; True; "value"; $native)
 
 Function version()->$result : Object
 	$result:=This._decode(This._cli.execute(New collection("--version")); "version")

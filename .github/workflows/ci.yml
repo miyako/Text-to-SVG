@@ -3,6 +3,11 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      run_4d:
+        description: Run build-only source and compiled-package 4D host checks
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       source_sha:
@@ -11,6 +16,10 @@ on:
         default: ''
       release_call:
         description: Release caller performs mandatory 4D acceptance separately
+        type: boolean
+        default: false
+      run_4d:
+        description: Explicit build-only 4D validation, without enabling publication
         type: boolean
         default: false
 
@@ -123,22 +132,24 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Download pinned free tool4D for optional branch and PR integration tests
-        if: vars.FOURD_ENABLED == 'true' && github.ref_type != 'tag' && !inputs.release_call
+        if: (vars.FOURD_ENABLED == 'true' || inputs.run_4d) && github.ref_type != 'tag' && !inputs.release_call
         env:
           TOOL4D_URL: ${{ vars.TOOL4D_URL }}
           TOOL4D_SHA256: ${{ vars.TOOL4D_SHA256 }}
         run: python scripts/ci_config.py download-tool4d
       - name: Test interpreted component from a real 4D host
-        if: vars.FOURD_ENABLED == 'true' && github.ref_type != 'tag' && !inputs.release_call
-        run: python scripts/test_4d.py --tool4d .tools/tool4d.app/Contents/MacOS/tool4d
+        if: (vars.FOURD_ENABLED == 'true' || inputs.run_4d) && github.ref_type != 'tag' && !inputs.release_call
+        run: |
+          python scripts/test_4d.py --tool4d .tools/tool4d.app/Contents/MacOS/tool4d
+          cp build/host-status.json build/source-host-status.json
       - name: Compile both 4D targets
-        if: vars.FOURD_ENABLED == 'true' && github.ref_type != 'tag' && !inputs.release_call
+        if: (vars.FOURD_ENABLED == 'true' || inputs.run_4d) && github.ref_type != 'tag' && !inputs.release_call
         run: python scripts/compile_component.py --tool4d .tools/tool4d.app/Contents/MacOS/tool4d
       - name: Package and test the actual compiled component
-        if: vars.FOURD_ENABLED == 'true' && github.ref_type != 'tag' && !inputs.release_call
+        if: (vars.FOURD_ENABLED == 'true' || inputs.run_4d) && github.ref_type != 'tag' && !inputs.release_call
         shell: python
         run: |
-          import os, subprocess, sys
+          import hashlib, json, os, shutil, subprocess, sys
           sys.path.insert(0, "scripts")
           from ci_config import ROOT, load_config
           from package_component import package, unpack_for_test
@@ -148,3 +159,34 @@ jobs:
           subprocess.run([sys.executable, "scripts/test_4d.py", "--tool4d",
                           ".tools/tool4d.app/Contents/MacOS/tool4d",
                           "--component", str(component)], check=True)
+          shutil.copy2(ROOT / "build/host-status.json", ROOT / "build/compiled-host-status.json")
+          report = {
+              "schema": 1, "commit": subprocess.check_output(
+                  ["git", "rev-parse", "HEAD"], text=True).strip(),
+              "result": "partial", "finished": True, "release_ready": False,
+              "signing": "not_run",
+              "artifact": {"path": archive.relative_to(ROOT).as_posix(),
+                           "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+                           "bytes": archive.stat().st_size},
+              "steps": {name: {"status": "passed", "details": json.loads(
+                  (ROOT / "build" / filename).read_text(encoding="utf-8"))}
+                  for name, filename in (
+                      ("source_host", "source-host-status.json"),
+                      ("compile", "compile-status.json"),
+                      ("compiled_host", "compiled-host-status.json"))},
+          }
+          (ROOT / "build/host-validation.json").write_text(json.dumps(report, indent=2) + "\n")
+      - name: Retain build-only compiled package and host evidence
+        if: always() && (vars.FOURD_ENABLED == 'true' || inputs.run_4d) && github.ref_type != 'tag' && !inputs.release_call
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-validation
+          path: |
+            dist/*.zip
+            build/source-host-status.json
+            build/compile-status.json
+            build/compiled-host-status.json
+            build/host-status.json
+            build/host-validation.json
+          if-no-files-found: warn
+          retention-days: 30

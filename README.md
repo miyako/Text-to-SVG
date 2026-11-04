@@ -29,16 +29,15 @@ must be named exactly `Text-to-SVG.zip`. No published asset is implied here.
 ```4d
 var $outline : cs.TextToSVG.TextOutline
 var $request; $result : Object
-var $font; $output : 4D.File
+var $output : 4D.File
 var $target : Text
 $target:="macOS-universal"
 If (Is Windows)
     $target:="Windows-x64"
 End if
-$font:=File("/DATA/MyFont.otf")
 $output:=File("/DATA/lettering.svg")
 $outline:=cs.TextToSVG.TextOutline.new($target)
-$request:=New object("fontFile"; $font.platformPath; "faceIndex"; 0)
+$request:=New object("fontFile"; "/DATA/MyFont.otf"; "faceIndex"; 0)
 $request.text:="Office café"
 $request.fontSize:=10
 $request.units:="mm"
@@ -50,11 +49,29 @@ Else
 End if
 ```
 
-The font path is explicit and absolute. Use your own licensed scalable font;
+`fontFile` is **Text**, accepting host 4D filesystem paths such as
+`/DATA/MyFont.otf` or `/RESOURCES/MyFont.otf`, absolute POSIX paths, and native
+platform paths (including macOS HFS `.platformPath` values from existing code).
+The component resolves the path; callers need no expansion boilerplate.
+Three distinct steps are required internally: `File(path; pathType; *)` selects
+the **host** context, the `.platformPath` roundtrip through
+`File(...; fk platform path)` materializes the full physical path, and the
+expanded `.path` on macOS or `.platformPath` on Windows supplies the C++ JSON.
+The `*` matters for context-sensitive host resources; already absolute paths
+and expansion of an already-bound object do not need it. It is not added to
+the generic expansion roundtrip. Reading the original
+virtual object's `.path` alone is not sufficient. The component's own executable
+still uses component `/RESOURCES` without `*`. File objects are not request values.
+The native CLI itself understands only native paths, not 4D aliases or HFS syntax.
+
+Use your own licensed scalable font;
 there is no font-name lookup, fallback or substitution. Do not write an empty
 stdout/error response as SVG. Calls are synchronous, have a finite 30-second
 process timeout, close stdin and retain stdout, stderr, exit and system errors
 separately. A nonempty stderr alone is not a process failure.
+For example, `/System/Library/Fonts/ZapfDingbats.ttf` may be a readable font but
+does not cover ordinary Latin lettering: `missing_glyph` after fixing its path
+is a different error from `invalid_font`. Use a font covering the requested text.
 
 Detailed contracts:
 [TextOutline](component/Text-to-SVG/Documentation/Classes/TextOutline.md),
@@ -180,6 +197,17 @@ python3 scripts/test_4d.py --root . --tool4d .tools/tool4d.app/Contents/MacOS/to
 
 The `--tag` above validates identity only; it creates/pushes no tag.
 Free unsigned local tool4d compilation needs no activation or signing secrets.
+For build-only hosted source/compiled-package checks on this branch, dispatch
+the normal CI workflow with `run_4d=true`. This does not change `FOURD_ENABLED`,
+use Apple signing secrets, create tags or publish anything:
+
+```sh
+gh workflow run ci.yml --ref miyako-text-to-svg-implementation -f run_4d=true
+```
+
+The `compiled-validation` CI artifact retains the unsigned patch ZIP and fresh
+source/compiler/compiled-host evidence. A patch-validation ZIP is not a new
+published version and must not replace the existing release's assets.
 The approved compiler is **20.7 build 101905, macOS ARM64**, downloaded from
 the stable URL in `package.json.tool`:
 `https://resources-download.4d.com/release/20.x/20.7/101905/mac/tool4d_arm64.tar.xz`.

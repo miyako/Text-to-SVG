@@ -7,7 +7,8 @@ Windows requires `"Windows-x64"` explicitly. Component-internal references use
 
 ## convert(request : Object) : Object
 
-Supply `fontFile` (an explicit physical path as Text), `text` (Text),
+Supply `fontFile` (a host 4D filesystem path, absolute POSIX path or platform
+path as Text), `text` (Text),
 `fontSize` (finite positive number, at most 10000), and `units`
 (`"mm"`, `"pt"`, `"px"` or `"in"`). Optional `faceIndex` is a nonnegative integer,
 default zero. The wrapper copies the request and sets `protocol:1`; it does not
@@ -21,6 +22,23 @@ The request is serialized to UTF-8 JSON and sent to `convert` over stdin using
 the actual `SystemWorker.postMessage(Text)` API, then stdin is closed. Requests
 are bounded to 1 MiB by the CLI and text to 16384 UTF-8 bytes. Font files are
 explicit, never selected through platform font fallback.
+
+The component resolves `/DATA` and `/RESOURCES` in **host context**, using
+`File(path; pathType; *)` internally. Leading `/` selects POSIX/filesystem
+syntax; otherwise platform syntax is used, including macOS HFS paths from
+existing `.platformPath` callers and Windows native paths.
+It then reconstructs the File through its `.platformPath` and `fk platform path`
+before selecting the expanded `.path` on macOS or `.platformPath` on Windows.
+This materialization is required; the original `.path` can still contain a
+4D filesystem alias. The `*` context selector and platform-path expansion solve
+different problems. Callers need not resolve paths themselves. C++ receives only
+the physical native path, and the caller's `fontFile` is unchanged.
+
+Non-Text, empty or NUL-containing `fontFile` values return prelaunch
+`invalid_argument`. File construction/expansion errors are captured with a
+narrow local error handler and returned as `invalid_argument` with details.
+An unreadable resolved font still returns the CLI's `invalid_font` error.
+File objects and relative filenames are not supported request values.
 
 This is single-line horizontal LTR shaping, not paragraph layout: RTL and mixed
 scripts are rejected except the Japanese Han/Hiragana/Katakana family. Missing
@@ -63,7 +81,7 @@ If (Is Windows)
 End if
 $tool:=cs.TextToSVG.TextOutline.new($target)
 $request:=New object
-$request.fontFile:=$fontPath
+$request.fontFile:="/DATA/MyFont.otf"
 $request.text:="Hello"
 $request.fontSize:=12
 $request.units:="mm"
@@ -75,6 +93,9 @@ Else
 End if
 ```
 
-`_decode`, `_parse`, `_number`, `_invalid` and `_cli` are implementation details,
+A readable ZapfDingbats font can still return `missing_glyph` for Latin text.
+Path readability (`invalid_font`) and character coverage are separate checks.
+
+`_fontPath`, `_decode`, `_parse`, `_number`, `_invalid` and `_cli` are implementation details,
 not access-control boundaries. `--echo <literal>` is a CLI diagnostic used to
 verify native File/Folder argument quoting, not a feature method.

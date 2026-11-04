@@ -196,6 +196,14 @@ def _stage_fonts(root, host):
         if not notice.is_file():
             raise ValueError("host test needs font license: " + name)
         shutil.copy2(notice, destination / name)
+    for label, alias in (("Data", "DATA"), ("Resources", "RESOURCES")):
+        relative = Path(_host_path_prefix("font aliases")) / "NotoSerif-Regular.ttf"
+        staged = host / label / relative
+        staged.parent.mkdir(parents=True)
+        shutil.copy2(source / "NotoSerif-Regular.ttf", staged)
+        shutil.copy2(source / "NotoSerif-LICENSE.txt", staged.parent / "NotoSerif-LICENSE.txt")
+        result["fontFile" + label] = str(staged)
+        result["fontAlias" + label] = "/" + alias + "/" + relative.as_posix()
     return result
 
 

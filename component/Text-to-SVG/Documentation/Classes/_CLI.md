@@ -5,9 +5,9 @@ executable resolver. The host can technically access `cs.TextToSVG._CLI`;
 underscore naming is not true private access in 4D.
 
 `execute(arguments : Collection; {stdin : Text}) : Object` selects `/RESOURCES/bin/macOS/<name>`
-or `/RESOURCES/bin/Windows/<name>.exe`, checks existence, expands the virtual
-File to a physical path using `File(file.platformPath; fk platform path)`, then
-delegates to `_Process`. There is deliberately no PATH search, permission repair,
+or `/RESOURCES/bin/Windows/<name>.exe`, checks existence, and delegates to
+`_Process`, which expands the virtual File using its platform path and
+`fk platform path`. There is deliberately no PATH search, permission repair,
 shell, download, copied PDF algorithm or queue.
 
 macOS default/`macOS-universal` uses the two-slice executable. Windows requires

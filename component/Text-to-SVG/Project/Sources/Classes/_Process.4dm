@@ -1,3 +1,14 @@
+Function expand($entry : Object)->$expanded : Object
+	$expanded:=OB Class($entry).new($entry.platformPath; fk platform path)
+
+Function nativePath($entry : Object)->$path : Text
+	var $expanded : Object
+	$expanded:=This.expand($entry)
+	$path:=$expanded.path
+	If (Is Windows)
+		$path:=$expanded.platformPath
+	End if
+
 Function quote($argument : Text)->$quoted : Text
 	var $i; $slashes; $j : Integer
 	var $character : Text
@@ -45,7 +56,8 @@ Function execute($file : 4D.File; $arguments : Collection; $stdin : Text)->$resu
 	If (($file=Null) | ($arguments=Null))
 		return New object("ok"; False; "error"; New object("code"; "invalid_argument"; "message"; "Executable File and arguments Collection are required"))
 	End if
-	$command:=This.quote($file.path)
+	$file:=This.expand($file)
+	$command:=This.quote(This.nativePath($file))
 	For each ($value; $arguments)
 		If ((Value type($value)#Is text) & (Value type($value)#Is object))
 			return New object("ok"; False; "error"; New object("code"; "invalid_argument"; "message"; "Arguments must be Text, File or Folder"))
@@ -54,15 +66,9 @@ Function execute($file : 4D.File; $arguments : Collection; $stdin : Text)->$resu
 			: (Value type($value)=Is text)
 				$argument:=$value
 			: (OB Instance of($value; 4D.File))
-				$argument:=File($value.platformPath; fk platform path).path
-				If (Is Windows)
-					$argument:=$value.platformPath
-				End if
+				$argument:=This.nativePath($value)
 			: (OB Instance of($value; 4D.Folder))
-				$argument:=Folder($value.platformPath; fk platform path).path
-				If (Is Windows)
-					$argument:=$value.platformPath
-				End if
+				$argument:=This.nativePath($value)
 			Else
 				return New object("ok"; False; "error"; New object("code"; "invalid_argument"; "message"; "Arguments must be Text, File or Folder"))
 		End case

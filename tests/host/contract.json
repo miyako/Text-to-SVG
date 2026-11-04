@@ -2,7 +2,7 @@
   "schema": 1,
   "feature": {
     "casesPath": "/cases",
-    "caseCount": 8,
+    "caseCount": 11,
     "caseAssertions": [
       {"path": "/value/protocol", "equals": 1},
       {"path": "/value/ok", "equals": true},
@@ -12,6 +12,31 @@
     ],
     "assertions": [
       {"path": "/requestUnchanged", "equals": true},
+      {"path": "/fontPaths", "length": 2, "each": [
+        {"path": "/hostContext", "equals": true},
+        {"path": "/virtualBefore", "equals": true},
+        {"path": "/physicalAfter", "equals": true},
+        {"path": "/fileHelper", "equals": true},
+        {"path": "/folderHelper", "equals": true}
+      ]},
+      {"path": "/aliasRequestsUnchanged", "equals": true},
+      {"path": "/aliasOutputMatches", "equals": true},
+      {"path": "/unresolvedFontPath/ok", "equals": false},
+      {"path": "/unresolvedFontPath/error/code", "equals": "invalid_argument"},
+      {"path": "/unresolvedFontPath/error/message", "equals": "fontFile path could not be resolved"},
+      {"path": "/unresolvedFontPath/exitCode", "absent": true},
+      {"path": "/pathHandlerRestored", "equals": true},
+      {"path": "/rawFontAliasCLI/ok", "equals": false},
+      {"path": "/rawFontAliasCLI/exitCode", "equals": 2},
+      {"path": "/rawFontAliasCLI/error/code", "equals": "invalid_font"},
+      {"path": "/missingFontAlias/ok", "equals": false},
+      {"path": "/missingFontAlias/exitCode", "equals": 2},
+      {"path": "/missingFontAlias/error/code", "equals": "invalid_font"},
+      {"path": "/invalidFontPaths", "length": 7, "each": [
+        {"path": "/ok", "equals": false},
+        {"path": "/error/code", "equals": "invalid_argument"},
+        {"path": "/exitCode", "absent": true}
+      ]},
       {"path": "/geometry", "equals": true},
       {"path": "/failureSemantics", "equals": true},
       {"path": "/cases/0/value/units", "equals": "mm"},
@@ -31,6 +56,12 @@
       {"path": "/cases/7/value/units", "equals": "pt"},
       {"path": "/cases/7/value/fontSize", "equals": 24},
       {"path": "/cases/7/value/glyphCount", "equals": 1},
+      {"path": "/cases/8/value/glyphCount", "equals": 2},
+      {"path": "/cases/8/value/units", "equals": "mm"},
+      {"path": "/cases/9/value/glyphCount", "equals": 2},
+      {"path": "/cases/9/value/units", "equals": "mm"},
+      {"path": "/cases/10/value/glyphCount", "equals": 2},
+      {"path": "/cases/10/value/units", "equals": "mm"},
       {"path": "/invalid/ok", "equals": false},
       {"path": "/invalid/exitCode", "equals": 2},
       {"path": "/invalid/stdout", "equals": ""},

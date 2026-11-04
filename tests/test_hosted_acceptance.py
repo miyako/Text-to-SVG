@@ -198,7 +198,9 @@ class HostedAcceptanceTests(HostedFixture, unittest.TestCase):
         self.assertEqual(len(self.host_calls), 3)
         self.assertIsNone(self.host_calls[0])
         self.assertEqual(self.host_calls[-1], self.root / "build/release-test" / (self.name + ".4dbase"))
-        self.assertEqual(len(report["steps"]["compiled_host"]["details"]["cases"]), 8)
+        contract = json.loads((self.root / "tests/host/contract.json").read_text())
+        self.assertEqual(len(report["steps"]["compiled_host"]["details"]["cases"]),
+                         contract["feature"]["caseCount"])
         self.assertTrue(report["steps"]["compiled_host"]["details"]["compiled"])
         self.assertNotEqual(report["unsigned_artifact"]["sha256"], report["artifact"]["sha256"])
         self.assertEqual(report["unsigned_compile"], self.marker)

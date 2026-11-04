@@ -151,7 +151,7 @@ class ReleaseRefTests(unittest.TestCase):
         signed = (ROOT / ".github/workflows/signed-build.yml").read_text(encoding="utf-8")
         self.assertEqual(ci.count("uses: actions/checkout@v4"), 3)
         self.assertEqual(ci.count("ref: ${{ inputs.source_sha || github.sha }}"), 3)
-        self.assertEqual(ci.count("&& !inputs.release_call"), 4)
+        self.assertEqual(ci.count("&& !inputs.release_call"), 5)
         self.assertIn("workflow_dispatch:", ci)
         self.assertIn("workflow_dispatch:", release)
         self.assertIn("fetch-depth: 0", release)

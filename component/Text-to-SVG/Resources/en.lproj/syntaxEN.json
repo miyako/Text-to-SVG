@@ -144,6 +144,38 @@
 				]
 			],
 			"Summary": ""
+		},
+		"nativePath()": {
+			"Syntax": "**.nativePath**( *entry* : Object )->path : Text",
+			"Params": [
+				[
+					"entry",
+					"Object",
+					"->"
+				],
+				[
+					"path",
+					"Text",
+					"<-"
+				]
+			],
+			"Summary": ""
+		},
+		"expand()": {
+			"Syntax": "**.expand**( *entry* : Object )->expanded : Object",
+			"Params": [
+				[
+					"entry",
+					"Object",
+					"->"
+				],
+				[
+					"expanded",
+					"Object",
+					"<-"
+				]
+			],
+			"Summary": ""
 		}
 	}
 }

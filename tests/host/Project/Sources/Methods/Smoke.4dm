@@ -1,11 +1,13 @@
 //%attributes = {"invisible":true}
 var $ignored : Integer
 var $parameter; $name; $target : Text
-var $folderPath : Text
-var $request; $result; $report; $conversion; $small; $large; $empty; $space; $probe : Object
+var $folderPath; $fontPath : Text
+var $request; $result; $report; $conversion; $small; $large; $empty; $space; $probe; $aliasRequest : Object
 var $tool : cs.TextToSVG.TextOutline
 var $requestFile; $statusFile : 4D.File
 var $renamedExecutable : 4D.File
+var $font; $expandedFont : 4D.File
+var $adapter : cs.TextToSVG._Process
 var $cases; $malformed : Collection
 var $invalid : Variant
 var HOST_StatusFile : 4D.File
@@ -59,6 +61,59 @@ For each ($probe; $cases)
 	If (Not($result.ok))
 		$report.success:=False
 	End if
+End for each
+HOST_Phase:="host font aliases"
+$adapter:=cs.TextToSVG._Process.new()
+$report.fontPaths:=New collection
+$report.aliasRequestsUnchanged:=True
+$report.aliasOutputMatches:=True
+For each ($name; New collection("Data"; "Resources"))
+	$font:=File($request["fontAlias"+$name]; fk posix path; *)
+	$expandedFont:=File($font.platformPath; fk platform path)
+	$fontPath:=$expandedFont.path
+	If (Is Windows)
+		$fontPath:=$expandedFont.platformPath
+	End if
+	$probe:=New object("hostContext"; $fontPath=$request["fontFile"+$name])
+	$probe.virtualBefore:=$font.path=$request["fontAlias"+$name]
+	$probe.physicalAfter:=$expandedFont.path#$font.path
+	$probe.fileHelper:=$adapter.nativePath($expandedFont)=$fontPath
+	$folderPath:=$expandedFont.parent.path
+	If (Is Windows)
+		$folderPath:=$expandedFont.parent.platformPath
+	End if
+	$probe.folderHelper:=$adapter.nativePath($expandedFont.parent)=$folderPath
+	$probe.nativePath:=$fontPath
+	$report.fontPaths.push($probe)
+	$aliasRequest:=New object("fontFile"; $request["fontAlias"+$name]; "text"; "AV"; "fontSize"; 12; "units"; "mm")
+	$result:=$tool.convert($aliasRequest)
+	If (($aliasRequest.fontFile#$request["fontAlias"+$name]) | (Value type($aliasRequest.protocol)#Is undefined))
+		$report.aliasRequestsUnchanged:=False
+	End if
+	$report.cases.push($result)
+	If (Not($result.ok))
+		$report.success:=False
+	Else
+		If ($report.cases[0].ok)
+			If ($result.value.svg#$report.cases[0].value.svg)
+				$report.aliasOutputMatches:=False
+			End if
+		End if
+	End if
+End for each
+$result:=$tool.convert(New object("fontFile"; $expandedFont.platformPath; "text"; "AV"; "fontSize"; 12; "units"; "mm"))
+$report.cases.push($result)
+If (Not($result.ok))
+	$report.success:=False
+End if
+$probe:=New object("protocol"; 1; "fontFile"; $request.fontAliasData; "text"; "AV"; "fontSize"; 12; "units"; "mm")
+$report.rawFontAliasCLI:=$tool._decode($tool._cli.execute(New collection("convert"); JSON Stringify($probe)); "convert")
+$report.missingFontAlias:=$tool.convert(New object("fontFile"; $request.fontAliasData+".missing"; "text"; "AV"; "fontSize"; 12; "units"; "mm"))
+$report.unresolvedFontPath:=$tool.convert(New object("fontFile"; "relative-font.ttf"; "text"; "AV"; "fontSize"; 12; "units"; "mm"))
+$report.pathHandlerRestored:=Method called on error(ek local)="Host_error"
+$report.invalidFontPaths:=New collection
+For each ($invalid; New collection(Null; 123; True; New object; New collection; ""; "bad"+Char(0)+"font"))
+	$report.invalidFontPaths.push($tool.convert(New object("fontFile"; $invalid; "text"; "AV"; "fontSize"; 12; "units"; "mm")))
 End for each
 $report.requestUnchanged:=Value type($conversion.protocol)=Is undefined
 If (Not($report.requestUnchanged))
