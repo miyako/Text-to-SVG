@@ -41,12 +41,30 @@ Function convert($request : Object)->$result : Object
 Function _fontPath($path : Text)->$result : Object
 	var $file : 4D.File
 	var $kind : Integer
+	var $absolute : Boolean
 	var $native; $previous : Text
 	var $errors : Collection
 	var CLI_LastErrors : Collection
 	$kind:=fk posix path
+	$absolute:=True
 	If (Substring($path; 1; 1)#"/")
 		$kind:=fk platform path
+		If (Is Windows)
+			$absolute:=Match regex("^[A-Za-z]:"; $path)
+			If ($absolute)
+				$absolute:=Length($path)>=3
+				If ($absolute)
+					$absolute:=(Substring($path; 3; 1)="/") | (Substring($path; 3; 1)=Char(92))
+				End if
+			Else
+				$absolute:=Substring($path; 1; 2)=Char(92)+Char(92)
+			End if
+		Else
+			$absolute:=Position(":"; $path; *)>1
+		End if
+	End if
+	If (Not($absolute))
+		return New object("ok"; False; "error"; New object("code"; "invalid_argument"; "message"; "fontFile must be an absolute or host filesystem path"))
 	End if
 	$previous:=Method called on error(ek local)
 	CLI_LastErrors:=Null

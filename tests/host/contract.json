@@ -23,8 +23,13 @@
       {"path": "/aliasOutputMatches", "equals": true},
       {"path": "/unresolvedFontPath/ok", "equals": false},
       {"path": "/unresolvedFontPath/error/code", "equals": "invalid_argument"},
-      {"path": "/unresolvedFontPath/error/message", "equals": "fontFile path could not be resolved"},
+      {"path": "/unresolvedFontPath/error/message", "equals": "fontFile must be an absolute or host filesystem path"},
       {"path": "/unresolvedFontPath/exitCode", "absent": true},
+      {"path": "/relativeFontPaths", "length": 3, "each": [
+        {"path": "/ok", "equals": false},
+        {"path": "/error/code", "equals": "invalid_argument"},
+        {"path": "/exitCode", "absent": true}
+      ]},
       {"path": "/pathHandlerRestored", "equals": true},
       {"path": "/rawFontAliasCLI/ok", "equals": false},
       {"path": "/rawFontAliasCLI/exitCode", "equals": 2},

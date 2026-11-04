@@ -109,7 +109,15 @@ End if
 $probe:=New object("protocol"; 1; "fontFile"; $request.fontAliasData; "text"; "AV"; "fontSize"; 12; "units"; "mm")
 $report.rawFontAliasCLI:=$tool._decode($tool._cli.execute(New collection("convert"); JSON Stringify($probe)); "convert")
 $report.missingFontAlias:=$tool.convert(New object("fontFile"; $request.fontAliasData+".missing"; "text"; "AV"; "fontSize"; 12; "units"; "mm"))
-$report.unresolvedFontPath:=$tool.convert(New object("fontFile"; "relative-font.ttf"; "text"; "AV"; "fontSize"; 12; "units"; "mm"))
+$malformed:=New collection("relative-font.ttf"; ":relative-font.ttf"; "../relative-font.ttf")
+If (Is Windows)
+	$malformed:=New collection("C:"; "C:relative-font.ttf"; Char(92)+"relative-font.ttf")
+End if
+$report.relativeFontPaths:=New collection
+For each ($invalid; $malformed)
+	$report.relativeFontPaths.push($tool.convert(New object("fontFile"; $invalid; "text"; "AV"; "fontSize"; 12; "units"; "mm")))
+End for each
+$report.unresolvedFontPath:=$report.relativeFontPaths[0]
 $report.pathHandlerRestored:=Method called on error(ek local)="Host_error"
 $report.invalidFontPaths:=New collection
 For each ($invalid; New collection(Null; 123; True; New object; New collection; ""; "bad"+Char(0)+"font"))

@@ -34,8 +34,9 @@ This materialization is required; the original `.path` can still contain a
 different problems. Callers need not resolve paths themselves. C++ receives only
 the physical native path, and the caller's `fontFile` is unchanged.
 
-Non-Text, empty or NUL-containing `fontFile` values return prelaunch
-`invalid_argument`. File construction/expansion errors are captured with a
+Non-Text, empty, NUL-containing or relative `fontFile` values return prelaunch
+`invalid_argument`. Relative paths are rejected explicitly rather than relying
+on 4D's constructor normalization. File construction/expansion errors are captured with a
 narrow local error handler and returned as `invalid_argument` with details.
 An unreadable resolved font still returns the CLI's `invalid_font` error.
 File objects and relative filenames are not supported request values.
