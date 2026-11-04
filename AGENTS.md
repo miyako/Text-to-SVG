@@ -515,7 +515,9 @@ Summarize revision/input digest, language, tool versions/platform, exact command
 artifact/report paths and unvalidated checks. Never describe an Apple Silicon
 local package as fully cross-platform accepted. Partial acceptance is **NOT
 release ready**; publication requires all mandatory gates. Optional unsigned
-signing status alone is not a blocker for this unsigned pipeline.
+signing status alone is not a blocker for the unsigned development pipeline.
+Text-to-SVG's separately authorized signed candidate/release pipeline requires
+signing, notarization and final-package verification; see section 8 and README.
 Report the **actual** compiler used: Go **1.25.1** was available in the local
 November 1 observation, whereas **1.26.10** is the CI pin and the source minimum
 is 1.23. Do not relabel a local 1.25.1 build as a 1.26.10 build.
@@ -558,7 +560,8 @@ resources, compile fresh, and load the **exact final ZIP's** unpacked component.
 Report unsupported/unavailable checks as `not_run`; local success remains
 `release_ready:false`. Approved publication additionally requires the existing
 matching tag, all required native artifact/tests, hosted 4D opt-in and the final
-package-host gate. Signing is optional for the existing unsigned release.
+package-host gate. Signing remains optional for unsigned local development, but
+is mandatory for this destination's signed candidate and release workflows.
 
 The final handoff must identify the repository/namespace/class/CLI/language,
 revision and input provenance, exact commands/results, tool versions, stable ZIP
@@ -623,13 +626,26 @@ notarization `Accepted`, clean temporary keychains even on failure and test the
 final signed compiled package. Bare CLI executables cannot be stapled; a signed
 container/Apple `Contents/` layout requires deliberate packaging changes.
 
-### Seven Apple secrets: registration is not implementation
+### Text-to-SVG signed lifecycle and six Apple secrets
 
-The current `.github/workflows/release.yml` is **unsigned** and consumes **none**
-of these seven secrets. Merely registering them does **not** enable signing or
-notarization. Implementing a signing workflow is separate, explicitly approved
-scope; this playbook documents credential types, not an implemented integration.
-No secret below is required by the free local compiler or unsigned acceptance.
+The destination now implements the explicitly authorized signed lifecycle.
+`release-policy.json` lists `0.1.0`; the shared `signed-build.yml` additionally
+requires signing without an unsigned fallback. The trusted push-only
+`signing-candidate.yml` is non-publishing; the existing-tag release caller uses
+the identical build/sign/final-host path before publication.
+No secret below is required by the free local compiler or unsigned local
+acceptance. Candidate execution does not authorize a tag, release or main merge.
+
+The signer derives the Developer ID Application identity from the imported
+certificate and configured team: **do not add CODESIGN_APPLE_ID**. It signs real
+Mach-O CLI/Libraries in an isolated extracted package, signs/notarizes/staples a
+DMG, and repacks the ZIP from the final mounted DMG. The ZIP cannot be stapled.
+Clean compiler markers and native manifests remain pre-sign provenance, never
+rewritten to bless modified bytes. Adjacent final-byte evidence, explicit Apple
+`Accepted`, signature/team/timestamp/runtime checks, Gatekeeper checks and real
+final compiled-ZIP host loading are mandatory. Never expose signing secrets to
+PR/fork code. Use isolated temporary keychain/search-list state and both normal
+and always-run cleanup; retain redacted failure diagnostics only.
 
 For a future approved integration, register private values in the **destination**
 repository under **Settings → Secrets and variables → Actions → Secrets → New
@@ -645,7 +661,6 @@ YAML, logs, package metadata or a PR.
 | `NOTARYTOOL_APPLE_ID` | The Apple account **email address** authorized to notarize for the Developer team. |
 | `NOTARYTOOL_TEAM_ID` | The Apple Developer **Team ID** for the signing identity and notarization account. |
 | `NOTARYTOOL_PASSWORD` | An Apple **app-specific password** for notarization, **not the normal Apple account login password**. |
-| `CODESIGN_APPLE_ID` | Despite the misleading name, the full **Developer ID Application signing identity**, such as `Developer ID Application: Organization (TEAMID)`, or its certificate **SHA-1 identity fingerprint**. **Not an email address.** |
 
 Keep public compiler pins/hosted opt-in under package metadata and Actions
 **Variables**, not Secrets. GitHub supplies the restricted publish job's

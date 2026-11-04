@@ -15,7 +15,7 @@ spec.loader.exec_module(compiler)
 
 class CompilerTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="compile tests ")
+        self.temp = tempfile.TemporaryDirectory(prefix=".compile-tests-", dir=ROOT)
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
         config = json.loads((ROOT / "template.json").read_text())
@@ -31,7 +31,7 @@ class CompilerTests(unittest.TestCase):
         self.status = self.root / "build/compile-status.json"
 
     def result(self, args, **kwargs):
-        self.status.write_text(json.dumps({"success": True, "project": self.project.as_posix(),
+        self.status.write_text(json.dumps({"success": True, "errors": [], "project": self.project.as_posix(),
                                          "targets": ["x86_64_generic", "arm64_macOS_lib"]}))
         self.assertNotIn("shell", kwargs)
         self.assertIn("--startup-method=Compile", args)
@@ -55,6 +55,21 @@ class CompilerTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 compiler.compile_component(self.root, "/fake/tool4d")
 
+    def test_success_with_diagnostics_or_missing_errors_rejected(self):
+        for errors in ([{"message": "bad class"}], None, {}, ""):
+            def diagnostics(*args, **kwargs):
+                self.result(*args, **kwargs)
+                status = json.loads(self.status.read_text())
+                if errors is None:
+                    del status["errors"]
+                else:
+                    status["errors"] = errors
+                self.status.write_text(json.dumps(status))
+            with self.subTest(errors=errors), patch.object(
+                    compiler.subprocess, "run", side_effect=diagnostics):
+                with self.assertRaisesRegex(ValueError, "compilation failed"):
+                    compiler.compile_component(self.root, "/fake/tool4d")
+
     def test_success_binds_input_digest_and_identity(self):
         with patch.object(compiler.subprocess, "run", side_effect=self.result):
             status = compiler.compile_component(self.root, "/fake/tool4d")
@@ -74,7 +89,7 @@ class CompilerTests(unittest.TestCase):
 
     def test_wrong_target_and_project_rejected(self):
         def wrong(*args, **kwargs):
-            self.status.write_text('{"success":true,"project":"wrong","targets":["x86_64_generic"]}')
+            self.status.write_text('{"success":true,"errors":[],"project":"wrong","targets":["x86_64_generic"]}')
         with patch.object(compiler.subprocess, "run", side_effect=wrong):
             with self.assertRaisesRegex(ValueError, "required project and targets"):
                 compiler.compile_component(self.root, "/fake/tool4d")

@@ -148,6 +148,7 @@ class ReleaseRefTests(unittest.TestCase):
     def test_workflows_pin_every_post_gate_checkout_and_package_tag(self):
         ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         release = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        signed = (ROOT / ".github/workflows/signed-build.yml").read_text(encoding="utf-8")
         self.assertEqual(ci.count("uses: actions/checkout@v4"), 3)
         self.assertEqual(ci.count("ref: ${{ inputs.source_sha || github.sha }}"), 3)
         self.assertEqual(ci.count("&& !inputs.release_call"), 4)
@@ -155,13 +156,15 @@ class ReleaseRefTests(unittest.TestCase):
         self.assertIn("workflow_dispatch:", release)
         self.assertIn("fetch-depth: 0", release)
         self.assertIn("source_sha: ${{ needs.gate.outputs.source_sha }}", release)
-        self.assertIn("release_call: true", release)
-        self.assertEqual(release.count("ref: ${{ needs.gate.outputs.source_sha }}"), 2)
-        self.assertEqual(release.count('validate --release --tag "$RELEASE_TAG"'), 2)
-        self.assertIn('package_component.py --tag "$RELEASE_TAG" --unpack-test', release)
-        self.assertLess(release.index("release_ref.py verify"), release.index("gh release create"))
+        self.assertIn("release_call: true", signed)
+        self.assertIn("uses: ./.github/workflows/signed-build.yml", release)
+        self.assertEqual(release.count("ref: ${{ needs.gate.outputs.source_sha }}"), 1)
+        self.assertEqual(release.count('validate --release --tag "$RELEASE_TAG"'), 1)
+        self.assertIn('accept_hosted.py --root .', signed)
+        self.assertIn('--require-apple-signing', signed)
+        self.assertLess(release.index("release_ref.py verify"), release.index("release_assets.py"))
         self.assertIn('git fetch --force --no-tags origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"', release)
-        self.assertIn("--verify-tag", release)
+        self.assertIn("--require-apple-signing --publish", release)
 
 
 if __name__ == "__main__":

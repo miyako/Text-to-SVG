@@ -15,8 +15,9 @@ bitmaps, raster tracing, centerlines or G-code. No service or Node.js is used.
 
 This destination repository was adopted from
 [miyako/4d-component-template](https://github.com/miyako/4d-component-template).
-Neither upstream template is modified. Implementation and unsigned local
-acceptance do **not** authorize publication, tags, visibility changes or signing.
+Neither upstream template is modified. Unsigned local acceptance and explicitly
+authorized signed-candidate verification do **not** authorize publication, tags,
+visibility changes or merging to the default branch.
 See [AGENTS.md](AGENTS.md) for the adoption and acceptance gates.
 
 ## 4D quickstart
@@ -202,6 +203,55 @@ the package gates succeed, `dist/Text-to-SVG.zip` with adjacent
 dependency-manager download/install and optional signing require separate
 evidence. No publication workflow should be dispatched before user review.
 
+## Signed candidate and release gates
+
+The signed lifecycle is now implemented, not merely configured through secrets.
+`release-policy.json` requires Apple notarization for version `0.1.0`; the release
+workflow also explicitly requires signing, so there is no unsigned fallback.
+Unsigned `accept_local.py` remains available for development and preserves its
+honest partial-platform result.
+
+The non-publishing candidate workflow runs only on an authorized push to
+`miyako-text-to-svg-implementation` whose commit message contains
+`[signed-candidate]`. It does not need a workflow merged to `main`, creates no
+tag/release, and has read-only repository permissions. Pull requests, forks and
+other branches cannot reach its secret-bearing job. Candidate and tag-release
+callers share `.github/workflows/signed-build.yml`, including the same native
+matrix and same-run manifest/artifact handoff.
+
+Exactly six Actions secrets are required: `APPLE_DEVELOPER_ID_CERTIFICATE`
+(base64 Developer ID Application P12 with private key),
+`APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD`, `KEYCHAIN_PASSWORD`,
+`NOTARYTOOL_APPLE_ID`, `NOTARYTOOL_PASSWORD` (app-specific), and
+`NOTARYTOOL_TEAM_ID`. The signing identity is derived from the imported
+certificate and checked against the configured team. There is no
+`CODESIGN_APPLE_ID` secret or normal Apple account password.
+
+The pipeline validates all three native build manifests, assembles Resources,
+runs the source host, requires clean structured compilation, and host-tests the
+unsigned compiled ZIP. It then signs an isolated extracted copy: the universal
+CLI and actual Mach-O component Libraries, not `.4DZ` data or arbitrary
+Resources. Developer ID, team, hardened runtime and secure timestamps are
+verified. Certificates/keychains live only in isolated runner-temporary storage,
+with `finally` cleanup and an independent `always()` workflow cleanup.
+
+A signed DMG is submitted to Apple; only explicit notarization `Accepted`
+permits stapling and staple validation. Rejection diagnostics are retained with
+credentials redacted. Signature/Gatekeeper checks apply to both payload and
+container. The final dependency-manager ZIP is produced from the actual mounted,
+accepted/stapled DMG; **ZIP files cannot be stapled**. Pre-sign compiler and
+native provenance is preserved, while final-byte hashes are regenerated after
+signing/stapling.
+
+Finally the exact signed ZIP is unpacked and loaded by real tool4d with compiled
+mode required. `release_assets.py` checks the resulting adjacent evidence and
+every delivered byte before artifact upload or future publication. Outputs are
+`Text-to-SVG.zip`, `Text-to-SVG.dmg`, `Text-to-SVG-signing.json` and
+`Text-to-SVG.acceptance.json`. A signed candidate is not a published release:
+native Intel/Windows 4D, published dependency-manager installation and Windows
+Authenticode remain separate observations. Publication still needs explicit user
+approval, an existing matching immutable tag and the release opt-in gate.
+
 ## Licensing
 
 Scaffold and original wrapper code: [MIT](LICENSE). Keep the original copyright
@@ -210,3 +260,7 @@ under `component/Text-to-SVG/Resources/licenses/`; fixture fonts have their own
 licenses/provenance under `tests/fonts/`. Review all relevant licenses when
 changing dependencies; notice file presence is not a legal audit.
 4D/tool4d is separately licensed vendor software and is never bundled.
+The signing lifecycle reuses/adapts MIT implementation patterns from
+`miyako/4d-component-template` signed-lifecycle revision
+`96da0b4a0f628536b906855a03f2a54ec6cdb002` and `miyako/hash`; it does not copy
+their component identities, feature fixtures or signing credentials.

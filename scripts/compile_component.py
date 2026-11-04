@@ -75,9 +75,13 @@ def compile_component(root, tool4d):
     if not output.is_file():
         raise ValueError("tool4d did not write compile-status.json; compilation is unverified")
     status = json.loads(output.read_text())
-    if status.get("success") is not True:
+    if not isinstance(status, dict):
+        raise ValueError("4D compiler result must be an object")
+    if status.get("success") is not True or status.get("errors") != []:
         raise ValueError("4D compilation failed: " + json.dumps(status.get("errors", [])))
-    if status.get("project") != project.as_posix() or set(status.get("targets", [])) != {"x86_64_generic", "arm64_macOS_lib"}:
+    if (status.get("project") != project.as_posix()
+            or not isinstance(status.get("targets"), list) or len(status["targets"]) != 2
+            or set(status["targets"]) != {"x86_64_generic", "arm64_macOS_lib"}):
         raise ValueError("compiler result does not identify the required project and targets")
     if input_digest(root) != original_digest:
         raise ValueError("component inputs changed during compilation; refusing stale output")
