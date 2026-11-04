@@ -1,10 +1,11 @@
 {
   "schema": 1,
-  "initialized": false,
-  "repository": "4d-component-template",
-  "namespace": "TemplateCLI",
-  "cli": "component-cli",
-  "language": null,
-  "feature": "Deterministic UTF-8 greeting example",
-  "version": "0.1.0"
+  "initialized": true,
+  "repository": "Text-to-SVG",
+  "namespace": "TextToSVG",
+  "cli": "text-to-svg",
+  "language": "cpp",
+  "feature": "Single-line TrueType/OpenType text outlines to physical-unit SVG paths using FreeType and HarfBuzz",
+  "version": "0.1.0",
+  "feature_class": "TextOutline"
 }

@@ -18,7 +18,12 @@ CONTRACT = json.loads((ROOT / "tests/host/contract.json").read_text(encoding="ut
 
 def valid_status(compiled=False):
     status = {"success": True, "finished": True, "compiled": compiled,
-              "cases": [{"ok": True, **copy.deepcopy(case)} for case in CONTRACT["feature"]["cases"]],
+              "cases": [{"ok": True, "stdout": "<svg></svg>\n", "stderr": "", "exitCode": 0,
+                         "value": {"protocol": 1, "ok": True, "svg": '<svg xmlns="http://www.w3.org/2000/svg"></svg>',
+                                   "pathData": "M0 0L1 1Z", "inkBounds": {"x": 0, "y": -1, "width": 1, "height": 1},
+                                   "advance": {"x": 1, "y": 0}, "units": "mm", "fontSize": 12,
+                                   "glyphCount": 2}}
+                        for _ in range(CONTRACT["feature"]["caseCount"])],
               "fileArgument": {"ok": True, "stdout": "file round trip", "stderr": "", "exitCode": 0},
               "folderArgument": {"ok": True, "stdout": "folder round trip", "stderr": "", "exitCode": 0}}
     def apply_assertions(value, assertions):
@@ -207,10 +212,10 @@ class ContractTests(unittest.TestCase):
     def test_contract_malformed_and_empty_sections_fail_closed(self):
         for mutation in (
                 lambda c: c.update(schema=True),
-                lambda c: c["feature"].update(cases=[]),
+                lambda c: c["feature"].update(caseCount=0),
                 lambda c: c["feature"].update(assertions=[]),
                 lambda c: c["execution"].update(assertions=[]),
-                lambda c: c["feature"]["cases"][0].pop("value"),
+                lambda c: c["feature"].update(caseAssertions=[]),
                 lambda c: c["execution"].update(successPaths=None),
                 lambda c: c["execution"]["assertions"].append({"path": "/success", "equal": True})):
             contract = copy.deepcopy(CONTRACT)
@@ -235,6 +240,11 @@ class HostRunnerTests(unittest.TestCase):
         self.config = config
         (self.root / "template.json").write_text(json.dumps(config), encoding="utf-8")
         shutil.copytree(ROOT / "tests/host", self.root / "tests/host")
+        fonts = self.root / "tests/fonts"
+        fonts.mkdir()
+        for name in ("NotoSerif-Regular.ttf", "NotoSansJP-Regular.otf",
+                     "NotoSerif-LICENSE.txt", "NotoSansJP-LICENSE.txt"):
+            (fonts / name).write_bytes(b"unit test font " + name.encode())
         source = self.root / "component" / config["repository"]
         source.mkdir(parents=True)
         (source / "marker").write_text("source", encoding="utf-8")
@@ -274,6 +284,13 @@ class HostRunnerTests(unittest.TestCase):
         self.assertEqual(Path(request["executable"]).parent, host)
         self.assertEqual(Path(request["executable"]).read_bytes(), b"unit test native resource")
         self.assertEqual(Path(request["status"]).parent, host)
+        for key in ("fontFile", "fontCFF"):
+            font = Path(request[key])
+            self.assertIn("日本語", font.parent.name)
+            self.assertEqual(font.parent.parent, host)
+            self.assertEqual(font.read_bytes(), b"unit test font " + font.name.encode())
+        self.assertTrue((Path(request["fontFile"]).parent / "NotoSerif-LICENSE.txt").is_file())
+        self.assertTrue((Path(request["fontCFF"]).parent / "NotoSansJP-LICENSE.txt").is_file())
         self.assertEqual((host / "Components" / (self.config["repository"] + ".4dbase") / "marker").read_text(),
                          "release" if request["expectCompiled"] else "source")
         if not request["expectCompiled"]:
@@ -328,6 +345,19 @@ class HostRunnerTests(unittest.TestCase):
                 self.run_host()
         self.assertEqual(list(self.output.parent.glob("4D host *")), [])
 
+    def test_failed_process_preserves_fresh_failure_report(self):
+        def failed_host(args, **kwargs):
+            request = json.loads(Path(next(a.split("=", 1)[1] for a in args
+                                           if a.startswith("--user-param="))).read_text())
+            Path(request["status"]).write_text('{"success":false,"phase":"runtime abort"}')
+            raise subprocess.CalledProcessError(1, args)
+        with patch.object(runner.subprocess, "run", side_effect=failed_host):
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.run_host()
+        self.assertEqual(json.loads(self.output.read_text()),
+                         {"success": False, "phase": "runtime abort"})
+        self.assertEqual(list(self.output.parent.glob("4D host *")), [])
+
     def test_uninitialized_template_remains_forbidden(self):
         self.config["initialized"] = False
         (self.root / "template.json").write_text(json.dumps(self.config))
@@ -336,7 +366,7 @@ class HostRunnerTests(unittest.TestCase):
         run.assert_not_called()
 
     def test_symlink_inputs_rejected_before_launch(self):
-        for base in (self.source, self.root / "tests/host"):
+        for base in (self.source, self.root / "tests/host", self.root / "tests/fonts"):
             link = base / "unsafe"
             link.symlink_to(self.root / "template.json")
             with patch.object(runner.subprocess, "run") as run, self.assertRaisesRegex(ValueError, "symlinks"):
@@ -347,6 +377,19 @@ class HostRunnerTests(unittest.TestCase):
         alias.symlink_to(self.source, target_is_directory=True)
         with self.assertRaisesRegex(ValueError, "symlinks"):
             self.run_host(alias)
+
+    def test_missing_font_fails_before_launch(self):
+        (self.root / "tests/fonts/NotoSerif-Regular.ttf").unlink()
+        with patch.object(runner.subprocess, "run") as run, self.assertRaisesRegex(ValueError, "font fixture"):
+            self.run_host()
+        run.assert_not_called()
+        self.assertEqual(list(self.output.parent.glob("4D host *")), [])
+
+    def test_font_notices_are_required_before_launch(self):
+        (self.root / "tests/fonts/NotoSerif-LICENSE.txt").unlink()
+        with patch.object(runner.subprocess, "run") as run, self.assertRaisesRegex(ValueError, "font license"):
+            self.run_host()
+        run.assert_not_called()
 
     def test_symlink_build_cannot_stage_outside_root(self):
         other = self.root / "other"

@@ -32,6 +32,7 @@ def native_target():
 
 
 def smoke_test(executable, version, contract, prefix=()):
+    root = Path(contract).resolve().parent.parent
     data = json.loads(Path(contract).read_text(encoding="utf-8"))
     cases = data.get("cases") if isinstance(data, dict) else None
     if not isinstance(data, dict) or data.get("schema") != 1 or not isinstance(cases, list) or not cases:
@@ -64,7 +65,13 @@ def smoke_test(executable, version, contract, prefix=()):
                 except (UnicodeDecodeError, re.error) as error:
                     raise ValueError("invalid UTF-8 stream or contract regex: " + str(error)) from error
             return actual == expected(field)
-        result = subprocess.run([*prefix, str(executable), *case["args"]], capture_output=True, timeout=20)
+        stdin = case.get("stdin")
+        if stdin is not None and not isinstance(stdin, str):
+            raise ValueError("CLI contract stdin must be Text")
+        result = subprocess.run(
+            [*prefix, str(executable), *case["args"]], capture_output=True, timeout=20,
+            input=None if stdin is None else stdin.replace(
+                "$ROOT", json.dumps(root.as_posix(), ensure_ascii=False)[1:-1]).encode("utf-8"))
         if (result.returncode != case["exitCode"] or not stream_matches("stdout", result.stdout)
                 or not stream_matches("stderr", result.stderr)):
             raise ValueError(f"CLI contract failed: {case['args']!r}: {result!r}")
@@ -131,6 +138,18 @@ def build(root, target, language=None, cross=False):
         ]
     for command in commands:
         subprocess.run(command, cwd=source, env=env, check=True, timeout=600)
+    if selected == "cpp":
+        compiler_files = list((output / "cmake/CMakeFiles").glob("*/CMakeCXXCompiler.cmake"))
+        if len(compiler_files) != 1:
+            raise ValueError("CMake compiler identity is missing or ambiguous")
+        compiler_data = compiler_files[0].read_text(encoding="utf-8")
+        compiler_id = re.search(r'set\(CMAKE_CXX_COMPILER_ID "([^"]+)"\)', compiler_data)
+        compiler_version = re.search(r'set\(CMAKE_CXX_COMPILER_VERSION "([^"]+)"\)', compiler_data)
+        if not compiler_id or not compiler_version:
+            raise ValueError("CMake did not identify the actual C++ compiler")
+        cmake_version = subprocess.run(
+            ["cmake", "--version"], check=True, capture_output=True, text=True).stdout.splitlines()[0]
+        toolchain = f"{compiler_id[1]} {compiler_version[1]}; {cmake_version}"
     if target == native:
         if selected == "go":
             subprocess.run(["go", "test", "./..."], cwd=source, env=env, check=True, timeout=600)
@@ -157,6 +176,10 @@ def build(root, target, language=None, cross=False):
         if not contract.is_file():
             raise ValueError("tests/cli-contract.json is required; define feature smoke vectors")
         smoke_test(executable, config["version"], contract)
+        if selected == "cpp":
+            from native_dependencies import inspect
+            dependencies = inspect(executable, target)
+            (output / "native-dependencies.json").write_text(json.dumps(dependencies, indent=2) + "\n")
     record(root, target, executable, target == native, toolchain)
     return executable
 

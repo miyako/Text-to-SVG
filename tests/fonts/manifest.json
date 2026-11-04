@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "files": [
+    {
+      "name": "NotoSerif-Regular.ttf",
+      "url": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSerif/NotoSerif-Regular.ttf",
+      "sha256": "c8f669ceb2c9c60ccf55198b305e08a997ffca79a38cc7eeb551e643cbe66505",
+      "license": "NotoSerif-LICENSE.txt"
+    },
+    {
+      "name": "NotoSerif-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/LICENSE",
+      "sha256": "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb"
+    },
+    {
+      "name": "NotoSansJP-Regular.otf",
+      "url": "https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/SubsetOTF/JP/NotoSansJP-Regular.otf",
+      "sha256": "dff723ba59d57d136764a04b9b2d03205544f7cd785a711442d6d2d085ac5073",
+      "license": "NotoSansJP-LICENSE.txt"
+    },
+    {
+      "name": "NotoSansJP-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/LICENSE",
+      "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2"
+    }
+  ],
+  "generated": {
+    "name": "NotoSerif-NotoSansJP.ttc",
+    "sources": ["NotoSerif-Regular.ttf", "NotoSansJP-Regular.otf"],
+    "sha256": "b19b9ffd884e9bdf50a8fe9b7a45420148d88b258b0acf453780e53d883534a3",
+    "recipe": "scripts/fetch_test_fonts.py: two-face TTC v1, original TTF then CFF sfnt data at 4-byte aligned offsets after 20-byte header; each table offset relocated by its sfnt start"
+  }
+}

@@ -2,3 +2,6 @@
 *.png binary
 *.zip binary
 *.4DZ binary
+*.ttf binary
+*.otf binary
+*.ttc binary

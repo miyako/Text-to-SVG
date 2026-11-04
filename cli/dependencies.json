@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "retrieval": "Build-time HTTPS FetchContent only; every archive is SHA256-verified. No runtime network access.",
+  "resolution": "Release tags were resolved through the GitHub git refs/tag APIs to the commits below. Archive bytes were downloaded from immutable commit URLs and hashed before pinning.",
+  "dependencies": [
+    {
+      "name": "FreeType",
+      "version": "2.13.3",
+      "tag": "VER-2-13-3",
+      "commit": "42608f77f20749dd6ddc9e0536788eaad70ea4b5",
+      "url": "https://codeload.github.com/freetype/freetype/tar.gz/42608f77f20749dd6ddc9e0536788eaad70ea4b5",
+      "sha256": "68ce87bb59ea209eb7350f41a94a27519ce16b37011b475a1e62d4abee154b66",
+      "license": "FTL, including bundled BDF/PCF/hash MIT and internal zlib notices",
+      "linkage": "static; external zlib, bzip2, PNG, Brotli and HarfBuzz integration disabled"
+    },
+    {
+      "name": "HarfBuzz",
+      "version": "10.2.0",
+      "tag": "10.2.0",
+      "commit": "7b27c8edd46c674e01dd226fa9e1aa7549f5c436",
+      "url": "https://codeload.github.com/harfbuzz/harfbuzz/tar.gz/7b27c8edd46c674e01dd226fa9e1aa7549f5c436",
+      "sha256": "818ac15af42769d5806d5f53077664976790264a8fd9161e135904b92ca9a923",
+      "license": "Old MIT, with Microsoft MIT notice for ms-use",
+      "linkage": "static; OpenType shaping and built-in Unicode functions; all optional external integrations disabled"
+    },
+    {
+      "name": "nlohmann/json",
+      "version": "3.11.3",
+      "tag": "v3.11.3",
+      "commit": "9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03",
+      "url": "https://codeload.github.com/nlohmann/json/tar.gz/9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03",
+      "sha256": "0dbc5e40a01ff142e7e68c03e85247a4dcede2f592d12d3677dee3664d17975a",
+      "license": "MIT",
+      "linkage": "header-only"
+    }
+  ],
+  "runtime": {
+    "macos": "OS-provided libc++ and libSystem only; no third-party dynamic libraries",
+    "windows_msvc": "CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded (MultiThreadedDebug in Debug); build using a properly licensed Microsoft toolchain and its applicable static CRT redistribution terms",
+    "windows_mingw": "static libgcc and libstdc++ requested; not locally validated"
+  }
+}

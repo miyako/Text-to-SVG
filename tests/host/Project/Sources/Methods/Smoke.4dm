@@ -2,11 +2,11 @@
 var $ignored : Integer
 var $parameter; $name; $target : Text
 var $folderPath : Text
-var $request; $result; $report : Object
-var $tool : cs.TemplateCLI.Greeting
+var $request; $result; $report; $conversion; $small; $large; $empty; $space; $probe : Object
+var $tool : cs.TextToSVG.TextOutline
 var $requestFile; $statusFile : 4D.File
 var $renamedExecutable : 4D.File
-var $cases : Collection
+var $cases; $malformed : Collection
 var $invalid : Variant
 var HOST_StatusFile : 4D.File
 var HOST_Phase : Text
@@ -32,8 +32,7 @@ $target:="macOS-universal"
 If (Is Windows)
 	$target:="Windows-x64"
 End if
-$tool:=cs.TemplateCLI.Greeting.new($target)
-$cases:=New collection("world"; "path with spaces"; "quote \" and \\ slash"; "line\nbreak"; "日本語"; "$() ; & % !")
+$tool:=cs.TextToSVG.TextOutline.new($target)
 $report:=New object("success"; True; "finished"; False; "cases"; New collection)
 $report.compiled:=$tool._cli.compiled
 HOST_Phase:="renamed executable"
@@ -42,7 +41,7 @@ If (Is Windows)
 Else
 	$renamedExecutable:=File($request.executable; fk posix path)
 End if
-$report.renamedExecutable:=cs.TemplateCLI._Process.new().execute($renamedExecutable; New collection("--version"))
+$report.renamedExecutable:=cs.TextToSVG._Process.new().execute($renamedExecutable; New collection("--version"))
 If (Not($report.renamedExecutable.ok))
 	$report.success:=False
 End if
@@ -50,22 +49,82 @@ HOST_Phase:="feature cases"
 If ($request.expectCompiled#$report.compiled)
 	$report.success:=False
 End if
-For each ($name; $cases)
-	$result:=$tool.greet($name)
+$conversion:=New object("fontFile"; $request.fontFile; "text"; "AV"; "fontSize"; 12; "units"; "mm")
+$cases:=New collection($conversion; New object("fontFile"; $request.fontFile; "text"; "AV"; "fontSize"; 24; "units"; "mm"); New object("fontFile"; $request.fontFile; "text"; " "; "fontSize"; 12; "units"; "mm"); New object("fontFile"; $request.fontFile; "text"; ""; "fontSize"; 12; "units"; "mm"); New object("fontFile"; $request.fontCFF; "text"; "A"; "fontSize"; 12; "units"; "pt"); New object("fontFile"; $request.fontFile; "text"; "é"; "fontSize"; 12; "units"; "px"))
+$cases.push(New object("fontFile"; $request.fontCFF; "faceIndex"; 0; "text"; "日本語ひらがなカタカナ"; "fontSize"; 0.5; "units"; "in"))
+$cases.push(New object("fontFile"; $request.fontCFF; "text"; "A"; "fontSize"; 24; "units"; "pt"))
+For each ($probe; $cases)
+	$result:=$tool.convert($probe)
 	$report.cases.push($result)
 	If (Not($result.ok))
 		$report.success:=False
+	End if
+End for each
+$report.requestUnchanged:=Value type($conversion.protocol)=Is undefined
+If (Not($report.requestUnchanged))
+	$report.success:=False
+End if
+HOST_Phase:="geometry semantics"
+$report.geometry:=False
+If ($report.success)
+	$small:=$report.cases[0].value
+	$large:=$report.cases[1].value
+	$space:=$report.cases[2].value
+	$empty:=$report.cases[3].value
+	If (($small.inkBounds=Null) | ($large.inkBounds=Null))
+		$report.success:=False
 	Else
-		If ($result.value.message#("Hello, "+$name+"!"))
+		If (($small.inkBounds.width<=0) | ($small.inkBounds.height<=0) | ($small.inkBounds.y>=0) | ($small.advance.x<=0) | ($small.advance.y#0) | ($small.pathData=""))
+			$report.success:=False
+		End if
+		If ((Abs($large.inkBounds.width-(2*$small.inkBounds.width))>0.00001) | (Abs($large.inkBounds.height-(2*$small.inkBounds.height))>0.00001) | (Abs($large.advance.x-(2*$small.advance.x))>0.00001))
 			$report.success:=False
 		End if
 	End if
-End for each
-$result:=$tool.greet("")
+	If (($space.pathData#"") | ($space.inkBounds#Null) | ($space.advance.x<=0) | ($empty.pathData#"") | ($empty.inkBounds#Null) | ($empty.advance.x#0) | ($empty.glyphCount#0))
+		$report.success:=False
+	End if
+	$small:=$report.cases[4].value
+	$large:=$report.cases[7].value
+	If (($small.inkBounds=Null) | ($large.inkBounds=Null))
+		$report.success:=False
+	Else
+		If (($small.inkBounds.width<=0) | ($small.inkBounds.height<=0) | ($small.advance.x<=0))
+			$report.success:=False
+		End if
+		If ((Abs($large.inkBounds.width-(2*$small.inkBounds.width))>0.00001) | (Abs($large.inkBounds.height-(2*$small.inkBounds.height))>0.00001) | (Abs($large.advance.x-(2*$small.advance.x))>0.00001))
+			$report.success:=False
+		End if
+	End if
+	$report.geometry:=$report.success
+End if
+HOST_Phase:="feature failures"
+$result:=$tool.convert(New object("fontFile"; $request.fontFile; "text"; "A"; "fontSize"; 0; "units"; "mm"))
 $report.invalid:=$result
 If ($result.ok | ($result.exitCode#2))
 	$report.success:=False
 End if
+$report.nullRequest:=$tool.convert(Null)
+HOST_Phase:="serialization failure"
+$probe:=OB Copy($conversion)
+$probe.circular:=$probe
+$report.serialization:=$tool.convert($probe)
+OB REMOVE($probe; "circular")
+If ($report.serialization.ok | ($report.serialization.error.code#"invalid_argument"))
+	$report.success:=False
+End if
+HOST_Phase:="feature failures"
+$report.missingFont:=$tool.convert(New object("fontFile"; $request.fontFile+".missing"; "text"; "A"; "fontSize"; 12; "units"; "mm"))
+$report.missingGlyph:=$tool.convert(New object("fontFile"; $request.fontFile; "text"; "日"; "fontSize"; 12; "units"; "mm"))
+$report.rtl:=$tool.convert(New object("fontFile"; $request.fontFile; "text"; "שלום"; "fontSize"; 12; "units"; "mm"))
+$report.failureSemantics:=True
+For each ($name; New collection("missingFont"; "missingGlyph"; "rtl"))
+	$result:=$report[$name]
+	If ($result.ok | ($result.exitCode#2) | ($result.stdout#""))
+		$report.success:=False
+		$report.failureSemantics:=False
+	End if
+End for each
 $result:=$tool.version()
 $report.version:=$result
 If (Not($result.ok))
@@ -76,63 +135,91 @@ Else
 	End if
 End if
 HOST_Phase:="missing executable"
-$result:=cs.TemplateCLI._CLI.new("missing-cli"; $target).execute(New collection("--version"))
+$result:=cs.TextToSVG._CLI.new("missing-cli"; $target).execute(New collection("--version"))
 $report.missing:=$result
 If ($result.error.code#"missing_executable")
 	$report.success:=False
 End if
-$result:=cs.TemplateCLI.Greeting.new("unsupported-arm-target").version()
+$result:=cs.TextToSVG.TextOutline.new("unsupported-arm-target").version()
 $report.unsupported:=$result
 If ($result.error.code#"unsupported_architecture")
 	$report.success:=False
 End if
 HOST_Phase:="launch failure"
-$result:=cs.TemplateCLI._Process.new().execute($requestFile; New collection)
+$result:=cs.TextToSVG._Process.new().execute($requestFile; New collection)
 $report.launch:=$result
 If ($result.error.code#"launch_failed")
 	$report.success:=False
 End if
 HOST_Phase:="malformed protocol"
-$result:=$tool._decode(New object("ok"; True; "stdout"; "not json"; "stderr"; ""; "exitCode"; 0); "message")
+$result:=$tool._decode(New object("ok"; True; "stdout"; "not json"; "stderr"; ""; "exitCode"; 0); "convert")
 $report.protocol:=$result
 If ($result.error.code#"invalid_protocol")
 	$report.success:=False
 End if
 $report.protocolTypes:=New collection
-For each ($name; New collection("{\"protocol\":true,\"message\":\"invalid\"}"; "{\"protocol\":false,\"message\":\"invalid\"}"))
-	$result:=$tool._decode(New object("ok"; True; "stdout"; $name; "stderr"; ""; "exitCode"; 0); "message")
+For each ($name; New collection("{\"protocol\":true,\"svg\":\"invalid\"}"; "{\"protocol\":false,\"svg\":\"invalid\"}"))
+	$result:=$tool._decode(New object("ok"; True; "stdout"; $name; "stderr"; ""; "exitCode"; 0); "convert")
 	$report.protocolTypes.push($result)
 	If ($result.ok | ($result.error.code#"invalid_protocol"))
 		$report.success:=False
 	End if
 End for each
-$result:=$tool._decode(New object("ok"; True; "stdout"; "{\"protocol\":null,\"message\":\"invalid\"}"; "stderr"; ""; "exitCode"; 0); "message")
+$result:=$tool._decode(New object("ok"; True; "stdout"; "{\"protocol\":null,\"svg\":\"invalid\"}"; "stderr"; ""; "exitCode"; 0); "convert")
 $report.protocolNull:=$result
 If ($result.ok | ($result.error.code#"invalid_protocol"))
 	$report.success:=False
 End if
 $report.protocolScalars:=New collection
 For each ($name; New collection("true"; "false"; "null"; "1"; "[]"))
-	$result:=$tool._decode(New object("ok"; True; "stdout"; $name; "stderr"; ""; "exitCode"; 0); "message")
+	$result:=$tool._decode(New object("ok"; True; "stdout"; $name; "stderr"; ""; "exitCode"; 0); "convert")
 	$report.protocolScalars.push($result)
 	If ($result.ok | ($result.error.code#"invalid_protocol"))
 		$report.success:=False
 	End if
 End for each
 HOST_Phase:="File argument"
-$result:=cs.TemplateCLI._CLI.new("component-cli"; $target).execute(New collection("greet"; "--name"; $requestFile))
+$report.malformedFields:=New collection
+$malformed:=New collection
+For each ($name; New collection("ok"; "svg"; "pathData"; "inkBounds"; "advance"; "units"; "fontSize"; "glyphCount"))
+	$probe:=OB Copy($report.cases[0].value)
+	OB REMOVE($probe; $name)
+	$malformed.push(JSON Stringify($probe))
+End for each
+$malformed.push("{\"protocol\":1,\"ok\":true,\"svg\":\"x\",\"pathData\":\"\",\"inkBounds\":null,\"advance\":{\"x\":true,\"y\":0},\"units\":\"mm\",\"fontSize\":12,\"glyphCount\":1}")
+$probe:=OB Copy($report.cases[0].value)
+$probe.glyphCount:=32769
+$malformed.push(JSON Stringify($probe))
+For each ($name; $malformed)
+	$result:=$tool._decode(New object("ok"; True; "stdout"; $name; "stderr"; ""; "exitCode"; 0); "convert")
+	$report.malformedFields.push($result)
+	If ($result.ok | ($result.error.code#"invalid_protocol"))
+		$report.success:=False
+	End if
+End for each
+HOST_Phase:="malformed error protocol"
+$report.malformedErrors:=New collection
+For each ($name; New collection("null"; "{\"protocol\":true,\"error\":{\"code\":\"bad\",\"message\":\"bad\"}}"; "{\"protocol\":1,\"error\":{\"code\":1,\"message\":\"bad\"}}"; "{\"protocol\":1,\"error\":{\"code\":\"bad\"}}"))
+	$result:=$tool._decode(New object("ok"; False; "stdout"; ""; "stderr"; $name; "exitCode"; 2; "error"; New object("code"; "cli_error"; "message"; $name)); "convert")
+	$report.malformedErrors.push($result)
+	If ($result.ok | ($result.error.code#"invalid_protocol"))
+		$report.success:=False
+	End if
+End for each
+HOST_Phase:="File argument"
+$result:=cs.TextToSVG._CLI.new("text-to-svg"; $target).execute(New collection("--echo"; $requestFile))
 $report.fileArgument:=$result
 If (Not($result.ok))
 	$report.success:=False
 Else
-	If (JSON Parse($result.stdout).message#("Hello, "+$parameter+"!"))
+	If (JSON Parse($result.stdout).argument#$parameter)
 		$report.success:=False
 	End if
 End if
 $report.rejectedArguments:=New collection
 HOST_Phase:="scalar arguments"
 For each ($invalid; New collection(123; 1.25; True; False; Null; Current date; Current time; New collection; New object))
-	$result:=cs.TemplateCLI._Process.new().execute($requestFile; New collection($invalid))
+	$result:=cs.TextToSVG._Process.new().execute($requestFile; New collection($invalid))
 	$report.rejectedArguments.push(New object("type"; Value type($invalid); "result"; $result))
 	If ($result.ok | ($result.error.code#"invalid_argument"))
 		$report.success:=False
@@ -141,14 +228,14 @@ End for each
 $report.rejectedNul:=New collection
 HOST_Phase:="NUL arguments"
 For each ($name; New collection(Char(0)+"prefix"; "middle"+Char(0)+"suffix"; "trailing"+Char(0)))
-	$result:=cs.TemplateCLI._Process.new().execute($requestFile; New collection($name))
+	$result:=cs.TextToSVG._Process.new().execute($requestFile; New collection($name))
 	$report.rejectedNul.push($result)
 	If ($result.ok | ($result.error.code#"invalid_argument"))
 		$report.success:=False
 	End if
 End for each
-$report.missingFile:=cs.TemplateCLI._Process.new().execute(Null; New collection)
-$report.missingArguments:=cs.TemplateCLI._Process.new().execute($requestFile; Null)
+$report.missingFile:=cs.TextToSVG._Process.new().execute(Null; New collection)
+$report.missingArguments:=cs.TextToSVG._Process.new().execute($requestFile; Null)
 If ($report.missingFile.ok | ($report.missingFile.error.code#"invalid_argument"))
 	$report.success:=False
 End if
@@ -156,7 +243,7 @@ If ($report.missingArguments.ok | ($report.missingArguments.error.code#"invalid_
 	$report.success:=False
 End if
 HOST_Phase:="Folder argument"
-$result:=cs.TemplateCLI._CLI.new("component-cli"; $target).execute(New collection("greet"; "--name"; $requestFile.parent))
+$result:=cs.TextToSVG._CLI.new("text-to-svg"; $target).execute(New collection("--echo"; $requestFile.parent))
 $report.folderArgument:=$result
 $folderPath:=$requestFile.parent.path
 If (Is Windows)
@@ -165,7 +252,7 @@ End if
 If (Not($result.ok))
 	$report.success:=False
 Else
-	If (JSON Parse($result.stdout).message#("Hello, "+$folderPath+"!"))
+	If (JSON Parse($result.stdout).argument#$folderPath)
 		$report.success:=False
 	End if
 End if

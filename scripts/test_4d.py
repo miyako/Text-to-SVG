@@ -177,6 +177,28 @@ def _host_path_prefix(label, windows=None):
     return label + " 日本語 ' \" quote"
 
 
+def _stage_fonts(root, host):
+    source = root / "tests" / "fonts"
+    _no_symlinks(source)
+    destination = host / _host_path_prefix("font fixtures")
+    destination.mkdir()
+    result = {}
+    for key, name in (("fontFile", "NotoSerif-Regular.ttf"),
+                      ("fontCFF", "NotoSansJP-Regular.otf")):
+        font = source / name
+        if not font.is_file():
+            raise ValueError("host test needs font fixture: " + name)
+        staged = destination / name
+        shutil.copy2(font, staged)
+        result[key] = str(staged)
+    for name in ("NotoSerif-LICENSE.txt", "NotoSansJP-LICENSE.txt"):
+        notice = source / name
+        if not notice.is_file():
+            raise ValueError("host test needs font license: " + name)
+        shutil.copy2(notice, destination / name)
+    return result
+
+
 def test_4d(root, tool4d, component=None):
     _no_symlinks(root, recursive=False)
     root = Path(root).resolve()
@@ -220,15 +242,19 @@ def test_4d(root, tool4d, component=None):
         staged_output = host / (_host_path_prefix("host status") + ".json")
         request.write_text(json.dumps({"status": str(staged_output),
                                       "expectCompiled": component is not None,
-                                      "executable": str(executable)}, ensure_ascii=False) + "\n",
+                                      "executable": str(executable),
+                                      **_stage_fonts(root, host)}, ensure_ascii=False) + "\n",
                            encoding="utf-8")
-        subprocess.run([str(Path(tool4d).resolve()), str(host / "Project" / "Host.4DProject"),
-                        "--skip-onstartup", "--startup-method=Smoke", "--dataless",
-                        "--user-param=" + str(request)], check=True, timeout=120)
-        _no_symlinks(staged_output, recursive=False)
+        try:
+            subprocess.run([str(Path(tool4d).resolve()), str(host / "Project" / "Host.4DProject"),
+                            "--skip-onstartup", "--startup-method=Smoke", "--dataless",
+                            "--user-param=" + str(request)], check=True, timeout=120)
+        finally:
+            _no_symlinks(staged_output, recursive=False)
+            if staged_output.is_file():
+                output.write_bytes(staged_output.read_bytes())
         if not staged_output.is_file() or staged_output.is_symlink():
             raise ValueError("tool4d did not write host-status.json; host execution is unverified")
-        output.write_bytes(staged_output.read_bytes())
         status = _read_json(output)
         return validate_status(status, contract, component is not None)
     finally:

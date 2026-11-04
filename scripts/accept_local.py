@@ -81,6 +81,13 @@ def accept(root, repository, tool4d, cross=False):
         component = root / "component" / config["repository"]
         validate_resources(component, config["cli"])
         def dependencies():
+            if config["language"] == "cpp":
+                from native_dependencies import inspect
+                return {
+                    "macOS": inspect(component / "Resources/bin/macOS" / config["cli"], native),
+                    "Windows": inspect(component / "Resources/bin/Windows" / (config["cli"] + ".exe"), "windows-x64"),
+                    "scope": "Actual binary imports only; native execution and 4D loading are separate checks"
+                }
             result = subprocess.run(["otool", "-L", str(component / "Resources/bin/macOS" / config["cli"])],
                                     capture_output=True, text=True, check=True)
             dependencies = [line.strip().split(" (", 1)[0] for line in result.stdout.splitlines()

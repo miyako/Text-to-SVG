@@ -1,0 +1,26 @@
+Text-to-SVG third-party notices
+
+Portions of this software are copyright © 2024 The FreeType Project
+(www.freetype.org). All rights reserved.
+FreeType 2.13.3 is used under the FreeType License (FTL), not the GPL option.
+See FreeType-FTL.txt, FreeType-LICENSE.txt and the FreeType-* notices.
+The FreeType sources include their internal zlib 1.3 decompressor; no external
+compression/image/font libraries are linked.
+
+HarfBuzz 10.2.0: see HarfBuzz-COPYING.txt, HarfBuzz-ms-use-COPYING.txt and
+HarfBuzz-source-notices.txt (including its ISC-licensed built-in UCD adapter).
+Its generated Unicode 16.0.0 tables are covered by Unicode-LICENSE.txt.
+nlohmann/json 3.11.3: see nlohmann-json-LICENSE-MIT.txt,
+nlohmann-json-attributions.txt and nlohmann-json-Abseil-Apache-2.0.txt.
+The MIT project license also remains applicable to Text-to-SVG itself.
+
+Exact immutable source commits and verified archive SHA256 hashes are recorded
+in cli/dependencies.json and enforced by cli/CMakeLists.txt at build time.
+The CLI never downloads fonts or libraries at runtime.
+
+macOS uses OS-provided libc++/libSystem. Windows MSVC builds request the static
+Microsoft C/C++ runtime (/MT, /MTd for Debug). Microsoft toolchain licensing
+and applicable static runtime redistribution terms apply to Windows builders;
+the presence of these notices is not a legal audit of their build environment.
+No Microsoft SDK, compiler, tool4d executable or system font is redistributed.
+Input font licenses remain the caller's responsibility.

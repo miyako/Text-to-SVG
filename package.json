@@ -1,8 +1,8 @@
 {
-  "name": "4d-component-template",
+  "name": "Text-to-SVG",
   "version": "0.1.0",
   "private": true,
-  "description": "Deterministic UTF-8 greeting example",
+  "description": "Single-line TrueType/OpenType text outlines to physical-unit SVG paths using FreeType and HarfBuzz",
   "license": "MIT",
   "tool": {
     "platform": "macos",
