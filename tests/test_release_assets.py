@@ -17,6 +17,7 @@ class ReleaseAssetsTests(HostedFixture, unittest.TestCase):
         self.mocks()
         self.report = self.accept()
         self.evidence = self.archive.with_suffix(".acceptance.json")
+        self.tag = "v" + self.config["version"]
 
     def verify(self, signing=True):
         return assets.verify_assets(self.root, "miyako/" + self.name,
@@ -84,7 +85,7 @@ class ReleaseAssetsTests(HostedFixture, unittest.TestCase):
                 with self.subTest(target=target, field=field), self.assertRaisesRegex(ValueError, "native build"):
                     self.verify()
 
-    def test_host_registry_rechecked_for_both_modes_all_eight_cases_and_diagnostics(self):
+    def test_host_registry_rechecked_for_both_modes_all_registered_cases_and_diagnostics(self):
         for name in ("source_host", "unsigned_compiled_host", "compiled_host"):
             for field, value in (("compiled", name == "source_host"), ("finished", False),
                                  ("cases", []), ("launch", None), ("serialization", None)):
@@ -184,7 +185,7 @@ class ReleaseAssetsTests(HostedFixture, unittest.TestCase):
         self.save_report(report)
         with patch.dict(os.environ, {"CANDIDATE_MODE": "true"}):
             with self.assertRaisesRegex(ValueError, "candidate"):
-                assets.publish(self.root, "miyako/" + self.name, "v0.1.0", SHA, True)
+                assets.publish(self.root, "miyako/" + self.name, self.tag, SHA, True)
         report["candidate"] = True
         self.change_proof(lambda p: p.update(candidate=True))
         updated = json.loads(self.evidence.read_text())
@@ -192,26 +193,29 @@ class ReleaseAssetsTests(HostedFixture, unittest.TestCase):
         self.save_report(updated)
         self.verify()
         with self.assertRaisesRegex(ValueError, "candidate"):
-            assets.publish(self.root, "miyako/" + self.name, "v0.1.0", SHA, True)
+            assets.publish(self.root, "miyako/" + self.name, self.tag, SHA, True)
 
     def test_explicit_publication_checks_existing_local_and_remote_tag(self):
         calls = []
 
         def run(command, **kwargs):
             calls.append(command)
-            return subprocess.CompletedProcess(command, 0, SHA + "\trefs/tags/v0.1.0\n", "")
+            return subprocess.CompletedProcess(command, 0, SHA + "\trefs/tags/" + self.tag + "\n", "")
         with patch.object(assets, "verify_tag") as tag, patch.object(assets.subprocess, "run", side_effect=run):
-            assets.publish(self.root, "miyako/" + self.name, "v0.1.0", SHA, True)
-        tag.assert_called_once_with(self.root, "v0.1.0", SHA)
+            assets.publish(self.root, "miyako/" + self.name, self.tag, SHA, True)
+        tag.assert_called_once_with(self.root, self.tag, SHA)
         self.assertEqual(calls[0][:3], ["git", "ls-remote", "--tags"])
-        self.assertEqual(calls[-1][:4], ["gh", "release", "create", "v0.1.0"])
+        self.assertEqual(calls[-1][:4], ["gh", "release", "create", self.tag])
         self.assertIn("--verify-tag", calls[-1])
+        self.assertEqual(calls[-1][calls[-1].index("--target") + 1], SHA)
+        self.assertIn("--latest", calls[-1])
+        self.assertNotIn("--prerelease", calls[-1])
         self.assertFalse(any("tag" in command[:2] for command in calls))
 
     def test_remote_tag_movement_blocks_publication(self):
         with patch.object(assets, "verify_tag"), patch.object(
                 assets.subprocess, "run", return_value=subprocess.CompletedProcess(
-                    [], 0, "f" * 40 + "\trefs/tags/v0.1.0\n", "")) as run:
+                    [], 0, "f" * 40 + "\trefs/tags/" + self.tag + "\n", "")) as run:
             with self.assertRaisesRegex(ValueError, "moved"):
-                assets.publish(self.root, "miyako/" + self.name, "v0.1.0", SHA, True)
+                assets.publish(self.root, "miyako/" + self.name, self.tag, SHA, True)
         self.assertEqual(run.call_count, 1)

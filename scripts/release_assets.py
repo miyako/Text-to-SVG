@@ -353,13 +353,27 @@ def publish(root, repository, tag, revision, apple_signing=False):
     if refs.get("refs/tags/" + tag + "^{}", refs.get("refs/tags/" + tag)) != revision:
         raise ValueError("remote release tag is missing or moved")
     notes = (
-        "Compiled component; the exact final ZIP passed compiled-host acceptance. "
+        f"## Text-to-SVG {tag}\n\n"
+        f"Source: `{revision}`; immutable tag `{tag}`.\n\n"
+        "The 4D wrapper resolves host `/DATA/` and `/RESOURCES/` font paths internally, "
+        "preserves absolute POSIX/native and macOS HFS path compatibility, and rejects relative paths. "
+        "No caller-side expansion is required. "
+        "Download **Text-to-SVG.zip**, unpack it, and place **Text-to-SVG.4dbase** "
+        "in the host project's **Components** folder (4D 20.7 LTS minimum). "
+        "The exact ZIP name is the dependency-manager asset identity.\n\n"
+        "Compiled component; the exact final ZIP passed compiled-host acceptance on macOS 15 ARM64. "
         + ("Developer ID signed macOS code; notarized, stapled DMG. ZIP copied from the final mounted DMG. "
            if apple_signing else "Unsigned package. ")
         + "Adjacent evidence binds final bytes, source, native CLI manifests and host reports. "
-        "Native Intel/Windows 4D and released-install checks remain separate observations.")
+        "\n\n**Limitations:** native Intel/Windows 4D and interactive dependency-manager installation "
+        "are `not_run`, as is Windows Authenticode. Local macOS 26.7 with tool4d 20.7 "
+        "has an intermittent shutdown SIGSEGV reproduced with unchanged unsigned and interpreted "
+        "baselines; this patch does not claim to fix that runtime issue. "
+        "Hosted macOS 15 checks require clean process exit. Acceptance remains "
+        "`result: partial`, `release_ready: false`; native CLI execution passed on all three targets.")
     subprocess.run(["gh", "release", "create", tag, *(str(path) for path in assets),
-                    "--repo", repository, "--verify-tag", "--title", tag, "--notes", notes],
+                    "--repo", repository, "--verify-tag", "--target", revision, "--latest",
+                    "--title", tag, "--notes", notes],
                    cwd=root, check=True)
 
 

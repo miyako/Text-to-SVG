@@ -1,0 +1,136 @@
+name: Verify public stable release downloads
+on:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: Existing stable release tag
+        type: string
+        required: true
+      source_sha:
+        description: Approved immutable source commit
+        type: string
+        required: true
+      zip_sha256:
+        description: Approved signed ZIP final-byte SHA256
+        type: string
+        required: true
+      dmg_sha256:
+        description: Approved signed DMG final-byte SHA256
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  public:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download exact checksum-verified free compiler
+        run: python scripts/ci_config.py download-tool4d
+      - name: Verify actual anonymous stable downloads and final compiled host
+        env:
+          EXPECTED_TAG: ${{ inputs.version_tag }}
+          EXPECTED_SHA: ${{ inputs.source_sha }}
+          EXPECTED_ZIP: ${{ inputs.zip_sha256 }}
+          EXPECTED_DMG: ${{ inputs.dmg_sha256 }}
+        shell: python
+        run: |
+          import hashlib, json, os, re, subprocess, sys
+          from pathlib import Path
+          sys.path.insert(0, "scripts")
+          from build_provenance import commit
+          from ci_config import load_config
+          from package_component import unpack_for_test
+          from release_assets import verify_assets, verify_signed_payload
+          from release_ref import verify
+          from sign_release import Commands, signature
+          from test_4d import test_4d
+
+          root = Path.cwd()
+          sha, tag = os.environ["EXPECTED_SHA"], os.environ["EXPECTED_TAG"]
+          expected = {"Text-to-SVG.zip": os.environ["EXPECTED_ZIP"],
+                      "Text-to-SVG.dmg": os.environ["EXPECTED_DMG"]}
+          if (not re.fullmatch(r"[a-f0-9]{40}", sha) or commit(root) != sha
+                  or any(not re.fullmatch(r"[a-f0-9]{64}", digest) for digest in expected.values())):
+              raise ValueError("approved source/hash inputs are invalid")
+          verify(root, tag, sha)
+
+          def fetch(url):
+              return subprocess.run([
+                  "curl", "--fail", "--location", "--silent", "--show-error",
+                  "--proto", "=https", "--proto-redir", "=https", url],
+                  check=True, capture_output=True, timeout=180).stdout
+
+          api = "https://api.github.com/repos/miyako/Text-to-SVG/releases/"
+          release = json.loads(fetch(api + "tags/" + tag))
+          latest = json.loads(fetch(api + "latest"))
+          if (release["draft"] is not False or release["prerelease"] is not False
+                  or release["tag_name"] != tag or release["target_commitish"] != sha
+                  or latest["id"] != release["id"]):
+              raise ValueError("public stable/latest/source mismatch")
+          dist = root / "dist"
+          dist.mkdir()
+          for name in (*expected, "Text-to-SVG-signing.json", "Text-to-SVG.acceptance.json"):
+              entry = next(asset for asset in release["assets"] if asset["name"] == name)
+              url = "https://github.com/miyako/Text-to-SVG/releases/download/" + tag + "/" + name
+              if entry["browser_download_url"] != url:
+                  raise ValueError("dependency-manager/public asset URL mismatch")
+              data = fetch(url)
+              actual = hashlib.sha256(data).hexdigest()
+              if (entry["digest"] != "sha256:" + actual or entry["size"] != len(data)
+                      or name in expected and actual != expected[name]):
+                  raise ValueError("actual public asset differs from approved bytes")
+              (dist / name).write_bytes(data)
+              expected[name] = actual
+          verify_assets(root, "miyako/Text-to-SVG", tag, sha, True)
+          sums = fetch("https://github.com/miyako/Text-to-SVG/releases/download/" + tag + "/SHA256SUMS")
+          canonical = "".join(digest + "  " + name + "\n" for name, digest in sorted(expected.items()))
+          if sums.decode("utf-8") != canonical:
+              raise ValueError("published final-byte checksums differ from actual assets")
+          config = load_config(root, initialized=True)
+          component = unpack_for_test(root, dist / "Text-to-SVG.zip")
+          signatures = verify_signed_payload(root, config, component)
+          commands = Commands(os.environ, {})
+          for entry in signatures["signedFiles"]:
+              commands.run("public code notarization", [
+                  "/usr/bin/codesign", "--verify", "--strict", "--all-architectures",
+                  "--check-notarization", "-R=notarized", component / entry["path"]])
+          dmg = dist / "Text-to-SVG.dmg"
+          signature(commands, dmg, signatures["team"], runtime=False)
+          commands.run("public DMG staple", ["/usr/bin/xcrun", "stapler", "validate", dmg])
+          commands.run("public DMG Gatekeeper", [
+              "/usr/sbin/spctl", "--assess", "--verbose=4", "--type", "open",
+              "--context", "context:primary-signature", dmg])
+          status = test_4d(root, root / ".tools/tool4d.app/Contents/MacOS/tool4d", component)
+          report = {
+              "schema": 1, "source_sha": sha, "tag": tag, "release": release["html_url"],
+              "prerelease": False, "latest": True, "anonymous_public_asset_hashes": expected,
+              "checks": {name: "passed" for name in (
+                  "public_downloads", "source_tag", "acceptance", "checksums",
+                  "native_signatures", "online_notarization", "dmg_signature",
+                  "dmg_staple", "dmg_gatekeeper", "public_compiled_host")},
+              "compiled_host": status, "release_ready": False,
+              "not_run": ["native_intel_4d", "windows_4d", "interactive_dependency_manager_install"],
+          }
+          (root / "build/public-release-verification.json").write_text(
+              json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+      - name: Retain actual public-download verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-release-verification
+          path: |
+            build/public-release-verification.json
+            build/host-status.json
+          if-no-files-found: warn
+          retention-days: 30

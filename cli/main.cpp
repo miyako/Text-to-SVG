@@ -23,7 +23,7 @@ int run(int argc, char* argv[]) {
         for (int i = 1; i < argc; ++i)
             textsvg::decode_utf8(argv[i]);
         if (argc == 2 && std::string_view(argv[1]) == "--version") {
-            std::cout << "{\"protocol\":1,\"version\":\"0.1.0\"}\n";
+            std::cout << "{\"protocol\":1,\"version\":\"" TEXTSVG_VERSION "\"}\n";
             return 0;
         }
         if (argc == 3 && std::string_view(argv[1]) == "--echo") {

@@ -22,9 +22,12 @@ See [AGENTS.md](AGENTS.md) for the adoption and acceptance gates.
 
 ## 4D quickstart
 
-Install the unpacked compiled `Text-to-SVG.4dbase` in the host's `Components`
-folder. A released dependency-manager asset, if publication is later approved,
-must be named exactly `Text-to-SVG.zip`. No published asset is implied here.
+Download `Text-to-SVG.zip` from the repository's
+[Latest release](https://github.com/miyako/Text-to-SVG/releases/latest), unpack it,
+and install `Text-to-SVG.4dbase` in the host's `Components` folder.
+The exact ZIP basename is also the dependency-manager asset identity.
+Version **0.1.1** fixes host font aliases and macOS platform-path conversion
+inside the wrapper; callers can pass the simple paths shown below.
 
 ```4d
 var $outline : cs.TextToSVG.TextOutline
@@ -136,7 +139,7 @@ Success exits 0 with one JSON object plus LF on stdout:
 The numbers above illustrate the schema, not a font-independent vector.
 Failure exits 2, leaves stdout empty and emits a protocol-1
 `{"protocol":1,"error":{"code":"...","message":"..."}}` diagnostic plus LF on
-stderr. `--version` returns `{"protocol":1,"version":"0.1.0"}` plus LF.
+stderr. `--version` returns `{"protocol":1,"version":"0.1.1"}` plus LF.
 `--echo <literal>` is a diagnostic argument-roundtrip command used by native
 4D host tests; it returns `{"protocol":1,"argument":"..."}`, not SVG.
 
@@ -190,7 +193,7 @@ python3 scripts/ci_config.py download-tool4d --root .
 python3 scripts/test_4d.py --root . --tool4d .tools/tool4d.app/Contents/MacOS/tool4d
 python3 scripts/compile_component.py --root . --tool4d .tools/tool4d.app/Contents/MacOS/tool4d
 python3 scripts/package_component.py --root . --repository miyako/Text-to-SVG \
-  --tag v0.1.0 --unpack-test
+  --tag v0.1.1 --unpack-test
 python3 scripts/test_4d.py --root . --tool4d .tools/tool4d.app/Contents/MacOS/tool4d \
   --component build/release-test/Text-to-SVG.4dbase
 ```
@@ -234,7 +237,7 @@ evidence. No publication workflow should be dispatched before user review.
 ## Signed candidate and release gates
 
 The signed lifecycle is now implemented, not merely configured through secrets.
-`release-policy.json` requires Apple notarization for version `0.1.0`; the release
+`release-policy.json` requires Apple notarization for versions `0.1.0` and `0.1.1`; the release
 workflow also explicitly requires signing, so there is no unsigned fallback.
 Unsigned `accept_local.py` remains available for development and preserves its
 honest partial-platform result.

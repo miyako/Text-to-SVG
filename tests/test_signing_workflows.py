@@ -13,6 +13,21 @@ SECRETS = (
 
 
 class SigningWorkflowTests(unittest.TestCase):
+    def test_stable_download_verification_is_explicit_pinned_and_secret_free(self):
+        workflow = (WORKFLOWS / "verify-release.yml").read_text()
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("  push:", workflow)
+        self.assertIn("ref: ${{ inputs.source_sha }}", workflow)
+        self.assertIn('release["prerelease"] is not False', workflow)
+        self.assertIn('latest["id"] != release["id"]', workflow)
+        self.assertIn('os.environ["EXPECTED_ZIP"]', workflow)
+        self.assertIn('os.environ["EXPECTED_DMG"]', workflow)
+        self.assertIn("verify_assets(root", workflow)
+        self.assertIn("verify_signed_payload(root", workflow)
+        self.assertIn("status = test_4d(root", workflow)
+        for forbidden in ("contents: write", "secrets.", "--publish", "continue-on-error"):
+            self.assertNotIn(forbidden, workflow)
+
     def test_build_only_host_opt_in_cannot_enable_release_or_signing(self):
         ci = (WORKFLOWS / "ci.yml").read_text()
         self.assertIn("run_4d:", ci)

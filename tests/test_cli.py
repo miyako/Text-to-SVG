@@ -250,7 +250,8 @@ class TextToSVGCLI(unittest.TestCase):
     def test_version_and_literal_echo(self):
         result = self.run_cli(args=["--version"])
         self.assertEqual((result.returncode, result.stdout, result.stderr),
-                         (0, b'{"protocol":1,"version":"0.1.0"}\n', b""))
+                         (0, json_line({"protocol": 1, "version": json.loads(
+                             (ROOT / "template.json").read_text())["version"]}), b""))
         for literal in ('😀 "quoted" \\backslash; \'$()\'', "世界 café\n\t", "", "--version"):
             with self.subTest(literal=literal):
                 result = self.run_cli(args=["--echo", literal])

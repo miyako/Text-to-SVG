@@ -1,6 +1,6 @@
 {
   "name": "Text-to-SVG",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Single-line TrueType/OpenType text outlines to physical-unit SVG paths using FreeType and HarfBuzz",
   "license": "MIT",

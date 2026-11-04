@@ -16,6 +16,14 @@ from build_cli import smoke_test
 
 
 class OutlineBuildTests(unittest.TestCase):
+    def test_native_version_is_bound_to_component_configuration(self):
+        root = Path(__file__).resolve().parents[1]
+        version = json.loads((root / "template.json").read_text())["version"]
+        cmake = (root / "cli/CMakeLists.txt").read_text()
+        self.assertIn("project(text-to-svg VERSION " + version + " LANGUAGES C CXX)", cmake)
+        self.assertIn('TEXTSVG_VERSION="${PROJECT_VERSION}"', cmake)
+        self.assertIn("TEXTSVG_VERSION", (root / "cli/main.cpp").read_text())
+
     def test_smoke_stdin_uses_checkout_root(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / ('checkout path' if os.name == "nt" else 'checkout "quoted" path')
