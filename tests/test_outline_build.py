@@ -23,6 +23,10 @@ class OutlineBuildTests(unittest.TestCase):
         self.assertIn("project(text-to-svg VERSION " + version + " LANGUAGES C CXX)", cmake)
         self.assertIn('TEXTSVG_VERSION="${PROJECT_VERSION}"', cmake)
         self.assertIn("TEXTSVG_VERSION", (root / "cli/main.cpp").read_text())
+        feature = root / "component/Text-to-SVG/Project/Sources/Classes/TextOutline.4dm"
+        host = root / "tests/host/Project/Sources/Methods/Smoke.4dm"
+        self.assertIn('$payload.version#"' + version + '"', feature.read_text())
+        self.assertIn('$result.value.version#"' + version + '"', host.read_text())
 
     def test_smoke_stdin_uses_checkout_root(self):
         with tempfile.TemporaryDirectory() as directory:
