@@ -121,7 +121,7 @@ class HostedFixture:
             "signedFiles": signed,
             "notarization": {"status": "Accepted", "submissionUUID": "01234567-89ab-cdef-0123-456789abcdef",
                              "ticketContents": tickets},
-            "assessments": {"cliExecute": "passed", "dmgOpen": "passed"},
+            "assessments": {"codeNotarization": "passed", "dmgOpen": "passed"},
             "dmg": {"stapled": True, "validated": True, "sha256": build_provenance.sha256(dmg)},
             "zip": {"sha256": build_provenance.sha256(self.archive), "stapled": False,
                     "notarizedViaDMG": True, "origin": "final-mounted-accepted-DMG"},

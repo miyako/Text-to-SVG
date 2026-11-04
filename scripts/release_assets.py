@@ -155,8 +155,8 @@ def verify_signing_proof(root, config, revision, compile_input, unsigned_hash, a
             expected_tickets[(
                 config["repository"] + ".dmg/" + config["repository"] + ".4dbase/" + entry["path"],
                 architecture)] = receipt["cdhash"]
-    if proof.get("assessments") != {"cliExecute": "passed", "dmgOpen": "passed"}:
-        raise ValueError("signing proof requires CLI and DMG Gatekeeper assessment")
+    if proof.get("assessments") != {"codeNotarization": "passed", "dmgOpen": "passed"}:
+        raise ValueError("signing proof requires online code notarization and DMG Gatekeeper assessment")
     tickets = notary.get("ticketContents")
     if not isinstance(tickets, list):
         raise ValueError("Accepted notary ticket coverage is required")

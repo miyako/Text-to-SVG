@@ -137,7 +137,7 @@ class ReleaseAssetsTests(HostedFixture, unittest.TestCase):
             lambda p: p["signedFiles"][0]["signatures"]["arm64"].update(hardenedRuntime=False),
             lambda p: p["signedFiles"][0]["signatures"]["arm64"].update(timestamp="none"),
             lambda p: p["signedFiles"][0]["signatures"].pop("x86_64"),
-            lambda p: p["assessments"].update(cliExecute="not_run"),
+            lambda p: p["assessments"].update(codeNotarization="not_run"),
         ]
         original = (self.root / "dist" / (self.name + "-signing.json")).read_text()
         for index, mutation in enumerate(mutations):

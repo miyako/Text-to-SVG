@@ -681,7 +681,6 @@ def sign_release(root=ROOT, env=None, *, require_apple_signing=False):
         try:
             payload, staged = prepare_payload(root, scratch, config, unsigned)
             before = snapshot(staged)
-            mac = staged / "Resources/bin/macOS" / config["cli"]
             signed = code_inventory(staged, config["cli"])
             relative_paths = [path.relative_to(staged).as_posix() for path in signed]
             fingerprint, identity = keychain.prepare(data)
@@ -709,8 +708,10 @@ def sign_release(root=ROOT, env=None, *, require_apple_signing=False):
             if signature(commands, dmg, secrets["NOTARYTOOL_TEAM_ID"],
                          runtime=False, identity=identity) != container:
                 raise SigningError("DMG signature changed while stapling")
-            commands.run("CLI Gatekeeper assessment", [
-                SPCTL, "--assess", "--verbose=4", "--type", "execute", mac])
+            for path in signed:
+                commands.run("code online notarization requirement", [
+                    CODESIGN, "--verify", "--strict", "--all-architectures",
+                    "--check-notarization", "-R=notarized", path])
             commands.run("DMG Gatekeeper assessment", [
                 SPCTL, "--assess", "--verbose=4", "--type", "open",
                 "--context", "context:primary-signature", dmg])
@@ -723,7 +724,7 @@ def sign_release(root=ROOT, env=None, *, require_apple_signing=False):
                                  "verified": True, "signatures": signatures[path]}
                                 for path in relative_paths],
                 "notarization": notarization,
-                "assessments": {"cliExecute": "passed", "dmgOpen": "passed"},
+                "assessments": {"codeNotarization": "passed", "dmgOpen": "passed"},
                 "dmg": {"stapled": True, "validated": True, "sha256": sha256(dmg)},
                 "zip": {"sha256": sha256(final_zip), "stapled": False,
                         "notarizedViaDMG": True, "origin": "final-mounted-accepted-DMG"},

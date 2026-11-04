@@ -238,7 +238,12 @@ class LifecycleTests(Fixture):
         self.assertTrue(signing_args[0][-1].endswith("Libraries/nested/helper"))
         self.assertTrue(signing_args[-2][-1].endswith("Resources/bin/macOS/text-to-svg"))
         self.assertTrue(all(not any("refs/tags/" in a for a in args) for args, _ in self.calls))
-        self.assertTrue(any(args[0] == signing.SPCTL and "execute" in args for args, _ in self.calls))
+        notarized = [args for args, _ in self.calls if "--check-notarization" in args]
+        self.assertEqual(len(notarized), len(proof["signedFiles"]))
+        self.assertTrue(all(args[0] == signing.CODESIGN and "-R=notarized" in args
+                            and "--all-architectures" in args for args in notarized))
+        self.assertFalse(any(args[0] == signing.SPCTL and "execute" in args
+                             for args, _ in self.calls))
         self.assertTrue(any(args[0] == signing.SPCTL and "context:primary-signature" in args
                             for args, _ in self.calls))
 
@@ -266,7 +271,8 @@ class LifecycleTests(Fixture):
 
     def test_failures_cleanup_keychain_and_preserve_unsigned_zip(self):
         original = self.archive.read_bytes()
-        for operation in ("import", "--sign", "notarytool submit", "stapler staple", "--assess", "attach"):
+        for operation in ("import", "--sign", "notarytool submit", "stapler staple",
+                          "--check-notarization", "--assess", "attach"):
             with self.subTest(operation=operation):
                 self.fail_label = operation
                 with self.assertRaises(signing.SigningError):

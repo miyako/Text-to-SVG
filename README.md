@@ -237,8 +237,12 @@ with `finally` cleanup and an independent `always()` workflow cleanup.
 
 A signed DMG is submitted to Apple; only explicit notarization `Accepted`
 permits stapling and staple validation. Rejection diagnostics are retained with
-credentials redacted. Signature/Gatekeeper checks apply to both payload and
-container. The final dependency-manager ZIP is produced from the actual mounted,
+credentials redacted. Every native payload is checked with strict signature
+verification and `codesign --check-notarization -R=notarized`; the signed DMG must
+pass Gatekeeper's open assessment. `spctl --type execute` is an app assessment
+and rejects bare CLI tools as "valid but does not seem to be an app", so it is
+not used as a standalone-CLI notarization test. The final dependency-manager ZIP
+is produced from the actual mounted,
 accepted/stapled DMG; **ZIP files cannot be stapled**. Pre-sign compiler and
 native provenance is preserved, while final-byte hashes are regenerated after
 signing/stapling.
