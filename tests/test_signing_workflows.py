@@ -13,6 +13,24 @@ SECRETS = (
 
 
 class SigningWorkflowTests(unittest.TestCase):
+    def test_published_verification_is_pinned_secret_free_and_read_only(self):
+        workflow = (WORKFLOWS / "verify-prerelease.yml").read_text()
+        self.assertIn("contents: read", workflow)
+        self.assertIn("ref: a89cdde65e380263963de688a773a5bcc9b71561", workflow)
+        self.assertIn("github.event_name == 'push'", workflow)
+        self.assertIn("github.ref == 'refs/heads/miyako-text-to-svg-implementation'", workflow)
+        self.assertIn("contains(github.event.head_commit.message, '[verify-prerelease]')", workflow)
+        self.assertIn('release["prerelease"] is not True', workflow)
+        self.assertIn("verify_assets(root", workflow)
+        self.assertIn("verify_signed_payload(root", workflow)
+        self.assertIn("status = test_4d(root", workflow)
+        self.assertIn('"public_compiled_host"', workflow)
+        for forbidden in ("contents: write", "secrets.", "--publish", "continue-on-error"):
+            self.assertNotIn(forbidden, workflow)
+        ci = (WORKFLOWS / "ci.yml").read_text()
+        self.assertIn("!contains(github.event.head_commit.message, '[verify-prerelease]')", ci)
+        self.assertIn("inputs.source_sha != ''", ci)
+
     def test_candidate_is_explicit_trusted_push_without_publication(self):
         candidate = (WORKFLOWS / "signing-candidate.yml").read_text()
         for guard in ("github.repository == 'miyako/Text-to-SVG'",
