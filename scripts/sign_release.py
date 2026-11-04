@@ -351,7 +351,8 @@ def signature(commands, path, team, *, runtime=True, architectures=None, identit
                 or re.search(r"^Signature=adhoc$", display, re.MULTILINE)
                 or (runtime and (not flags or not int(flags[1], 16) & 0x10000
                                  or "runtime" not in flags[2].split(",")))
-                or not timestamp or timestamp[1].strip().lower() in {"none", "not set"}
+                or not timestamp or not timestamp[1].strip()
+                or timestamp[1].strip().lower() in {"none", "not set"}
                 or not cdhash or not re.search(r"^Hash type=sha256(?:\s|$)", display, re.MULTILINE)):
             raise SigningError("signature display: required Developer ID, team, timestamp or runtime missing")
         if runtime:

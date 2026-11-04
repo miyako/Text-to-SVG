@@ -295,6 +295,30 @@ class HostedAcceptanceTests(HostedFixture, unittest.TestCase):
         self.assertEqual(json.loads(report)["failed_step"], "signing")
         self.assertFalse(json.loads(report)["finished"])
 
+    def test_timestamp_display_locale_does_not_change_exact_signed_bytes(self):
+        original = self.fake_run
+
+        def localized(command, **kwargs):
+            result = original(command, **kwargs)
+            if command[0] == "/usr/bin/codesign" and "--display" in command:
+                result.stderr = result.stderr.replace("12:00:00", "21:00:00")
+            return result
+
+        with patch.object(hosted.subprocess, "run", side_effect=localized):
+            self.assertTrue(self.accept()["finished"])
+
+    def test_missing_secure_timestamp_still_rejected(self):
+        original = self.fake_run
+
+        def missing(command, **kwargs):
+            result = original(command, **kwargs)
+            if command[0] == "/usr/bin/codesign" and "--display" in command:
+                result.stderr = result.stderr.replace("Nov 4, 2026 at 12:00:00", " ")
+            return result
+
+        with patch.object(hosted.subprocess, "run", side_effect=missing), self.assertRaises(ValueError):
+            self.accept()
+
     def test_final_signature_must_match_expected_team_and_receipts(self):
         original = self.fake_run
 

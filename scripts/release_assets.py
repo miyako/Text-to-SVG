@@ -209,14 +209,16 @@ def verify_signed_payload(root, config, component, expected_team=None):
                 team = actual[1]
             if (not actual or actual[1] != team or not authority
                     or not authority[1].endswith(" (" + team + ")")
-                    or not timestamp or timestamp[1].strip().lower() in {"none", "not set"}
+                    or not timestamp or not timestamp[1].strip()
+                    or timestamp[1].strip().lower() in {"none", "not set"}
                     or not cdhash
                     or not re.search(r"^CodeDirectory .*flags=.*\(.*\bruntime\b.*\)", text, re.MULTILINE)
                     or re.search(r"^Signature=adhoc$", text, re.MULTILINE)):
                 raise ValueError("final signatures require the expected Developer ID team, timestamp and runtime")
             receipt = receipts[relative][architecture]
+            # The full file hash binds timestamp bytes; display text varies by locale/time zone.
             if (receipt["team"] != team or receipt["authority"] != authority[1]
-                    or receipt["cdhash"] != cdhash[1] or receipt["timestamp"] != timestamp[1]):
+                    or receipt["cdhash"] != cdhash[1]):
                 raise ValueError("final signature differs from the accepted signing proof")
         entries.append({"path": relative, "sha256": expected_hash, "verified": True,
                         "architectures": architectures})
