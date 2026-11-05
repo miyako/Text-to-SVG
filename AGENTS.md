@@ -162,8 +162,8 @@ Update these surfaces together, preserving reusable infrastructure:
 7. Compiler-generated `Resources/en.lproj/syntaxEN.json`: regenerate through the
    actual compiler and verify the new class appears; never retain stale Greeting
    completion metadata.
-8. Redistribution notices under `component/<name>/Resources/licenses/`, and icon
-   source/generated icons only if the feature requires artwork changes.
+8. Redistribution notices under `component/<name>/Resources/licenses/`, and the
+   committed `Resources/logo.png`/`logo.svg` only if the feature requires new artwork.
 
 Keep `_CLI`, `_Process` and `_CaptureError` generic. Feature validators and
 algorithms belong in feature classes/CLI, not the process adapter. Add exact
@@ -287,7 +287,7 @@ waive redistribution notices or licensing for the IDE/Server/merged applications
 
 ```sh
 python3 -m unittest discover -s tests -v
-python3 scripts/generate_icons.py --check
+python3 scripts/validate_icons.py
 python3 scripts/build_cli.py --root . --target macos-arm64
 ```
 
@@ -599,10 +599,14 @@ cross-build or optional skipped workflow as passed.
 
 ## 8. Icons, licensing and optional signing
 
-Edit original `assets/icon-source.svg` within the supported rectangle/polygon
-renderer; regenerate **both** Resources icons. `logo.png` is real RGBA PNG and
-`logo.svg` embeds its byte-identical PNG data URI: **PNG-in-SVG**, not the reverse.
-For arbitrary artwork use a pinned real SVG rasterizer. Never rename SVG to PNG.
+The committed `component/<name>/Resources/logo.png` and `logo.svg` are the
+**source of truth** and may be hand-made custom artwork; they are not required
+to match any generator output. `python3 scripts/validate_icons.py` (CI and
+`accept_local.py`) only checks that `logo.png` is a real PNG (signature and a
+valid IHDR) and `logo.svg` is well-formed SVG XML. `scripts/generate_icons.py`
+is an optional bootstrap that rasterizes `assets/icon-source.svg` into starter
+icons only when both are missing; it refuses to overwrite existing icons. Never
+rename SVG to PNG.
 
 The scaffold is MIT; retain its copyright/license. Review all bundled tools,
 static libraries and language runtimes separately and include required notices
