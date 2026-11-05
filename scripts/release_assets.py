@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Verify exact accepted release assets; publication requires explicit invocation and an existing tag."""
+"""Verify exact accepted release assets; --publish creates the new bare tag and GitHub release."""
 import argparse
 import hashlib
-import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
@@ -10,9 +9,8 @@ import subprocess
 import zipfile
 
 from build_provenance import commit, sha256, source_digest
-from ci_config import ROOT, TARGETS, load_config, release_tag_matches
-from release_ref import validate_tag, verify as verify_tag
-from sign_release import release_policy, submission_uuid
+from ci_config import ROOT, SEMVER, TARGETS, load_config, release_tag_matches
+from sign_release import submission_uuid
 from test_4d import _read_json, validate_status
 
 # Adapted from miyako/4d-component-template (MIT), immutable revision
@@ -107,8 +105,7 @@ def verify_signing_proof(root, config, revision, compile_input, unsigned_hash, a
             or not release_tag_matches(proof.get("releaseTag"), config["version"])
             or proof.get("unsignedCompileInputSHA256") != compile_input
             or proof.get("unsignedZIPHashSHA256") != unsigned_hash
-            or proof.get("hostValidation") != "required-after-signing"
-            or type(proof.get("candidate")) is not bool):
+            or proof.get("hostValidation") != "required-after-signing"):
         raise ValueError("signing proof differs from the accepted release provenance")
     notary, dmg, archive = (proof.get(name) for name in ("notarization", "dmg", "zip"))
     if (not isinstance(notary, dict) or notary.get("status") != "Accepted"
@@ -228,8 +225,6 @@ def verify_signed_payload(root, config, component, expected_team=None):
 def verify_assets(root, repository, tag, revision, apple_signing=False):
     root = regular(root, directory=True).resolve()
     config = load_config(root, initialized=True, repository=repository, tag=tag)
-    if release_policy(root) and not apple_signing:
-        raise ValueError("publication cannot downgrade the version signing policy")
     if not digest(revision, 40) or commit(root) != revision:
         raise ValueError("publication checkout must match the normalized release SHA")
     evidence = regular(root / "dist" / (config["repository"] + ".acceptance.json"))
@@ -311,8 +306,6 @@ def verify_assets(root, repository, tag, revision, apple_signing=False):
             root, config, revision, compiled["input_sha256"], unsigned["sha256"], assets)
         if passed("signing_proof") != proof:
             raise ValueError("accepted signing proof differs from the downloaded proof")
-        if proof["candidate"] is not report.get("candidate"):
-            raise ValueError("signing proof candidate scope differs from acceptance")
         signatures = passed("apple_signatures")
         files = signed_archive_files(root, config)
         if (not isinstance(signatures, dict) or not isinstance(signatures.get("team"), str)
@@ -339,26 +332,16 @@ def verify_assets(root, repository, tag, revision, apple_signing=False):
 
 
 def publish(root, repository, tag, revision, apple_signing=False):
-    if os.environ.get("CANDIDATE_MODE", "").lower() == "true":
-        raise ValueError("candidate execution cannot publish")
-    validate_tag(tag)  # new releases never use a legacy v-prefixed tag
+    if not isinstance(tag, str) or not re.fullmatch(SEMVER, tag, flags=re.ASCII):
+        raise ValueError("new release tags are bare <SemVer> without a v prefix")
     assets = verify_assets(root, repository, tag, revision, apple_signing)
-    report = _read_json(assets[-1])
-    if report.get("candidate") is not False:
-        raise ValueError("candidate acceptance evidence cannot authorize publication")
-    verify_tag(root, tag, revision)
-    remote = subprocess.run(["git", "ls-remote", "--tags", "origin", "refs/tags/" + tag,
-                             "refs/tags/" + tag + "^{}"], cwd=root, check=True,
-                            capture_output=True, text=True, timeout=60)
-    refs = dict(line.split()[::-1] for line in remote.stdout.splitlines())
-    if refs.get("refs/tags/" + tag + "^{}", refs.get("refs/tags/" + tag)) != revision:
-        raise ValueError("remote release tag is missing or moved")
+    remote = subprocess.run(["git", "ls-remote", "--tags", "origin", "refs/tags/" + tag],
+                            cwd=root, check=True, capture_output=True, text=True, timeout=60)
+    if remote.stdout.strip():
+        raise ValueError("release tag already exists; Publish never moves or reuses a tag")
     notes = (
         f"## Text-to-SVG {tag}\n\n"
-        f"Source: `{revision}`; immutable tag `{tag}`.\n\n"
-        "The 4D wrapper resolves host `/DATA/` and `/RESOURCES/` font paths internally, "
-        "preserves absolute POSIX/native and macOS HFS path compatibility, and rejects relative paths. "
-        "No caller-side expansion is required. "
+        f"Source: `{revision}`.\n\n"
         "Download **Text-to-SVG.zip**, unpack it, and place **Text-to-SVG.4dbase** "
         "in the host project's **Components** folder (4D 20.7 LTS minimum). "
         "The exact ZIP name is the dependency-manager asset identity.\n\n"
@@ -366,14 +349,9 @@ def publish(root, repository, tag, revision, apple_signing=False):
         + ("Developer ID signed macOS code; notarized, stapled DMG. ZIP copied from the final mounted DMG. "
            if apple_signing else "Unsigned package. ")
         + "Adjacent evidence binds final bytes, source, native CLI manifests and host reports. "
-        "\n\n**Limitations:** native Intel/Windows 4D and interactive dependency-manager installation "
-        "are `not_run`, as is Windows Authenticode. Local macOS 26.7 with tool4d 20.7 "
-        "has an intermittent shutdown SIGSEGV reproduced with unchanged unsigned and interpreted "
-        "baselines; this patch does not claim to fix that runtime issue. "
-        "Hosted macOS 15 checks require clean process exit. Acceptance remains "
-        "`result: partial`, `release_ready: false`; native CLI execution passed on all three targets.")
+        "Native Intel/Windows 4D loading and Windows Authenticode are `not_run`.")
     subprocess.run(["gh", "release", "create", tag, *(str(path) for path in assets),
-                    "--repo", repository, "--verify-tag", "--target", revision, "--latest",
+                    "--repo", repository, "--target", revision, "--latest",
                     "--title", tag, "--notes", notes],
                    cwd=root, check=True)
 
@@ -386,7 +364,7 @@ def main():
     parser.add_argument("--sha", required=True)
     parser.add_argument("--require-apple-signing", action="store_true")
     parser.add_argument("--publish", action="store_true",
-                        help="publish verified assets to an existing immutable tag; default only verifies")
+                        help="create the bare tag and GitHub release from verified assets; default only verifies")
     args = parser.parse_args()
     try:
         if args.publish:

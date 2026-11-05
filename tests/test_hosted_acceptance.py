@@ -115,7 +115,6 @@ class HostedFixture:
         proof = {
             "schema": 1, "version": self.config["version"], "sourceSHA": SHA,
             "releaseTag": self.config["version"],
-            "candidate": os.environ.get("CANDIDATE_MODE", "").lower() == "true",
             "unsignedCompileInputSHA256": self.marker["input_sha256"],
             "unsignedZIPHashSHA256": unsigned["sha256"],
             "signedFiles": signed,
@@ -158,7 +157,7 @@ class HostedFixture:
         stack = ExitStack()
         self.addCleanup(stack.close)
         stack.enter_context(patch.dict(os.environ, {
-            "CANDIDATE_MODE": "false", "RELEASE_SHA": SHA,
+            "RELEASE_SHA": SHA,
             "RELEASE_TAG": self.config["version"], "NOTARYTOOL_TEAM_ID": TEAM,
         }))
         stack.enter_context(patch.object(hosted, "commit", return_value=SHA))
@@ -215,16 +214,8 @@ class HostedAcceptanceTests(HostedFixture, unittest.TestCase):
         self.assertTrue(signing[0][1]["capture_output"])
         self.assertFalse(any(command[0] in ("gh", "git") for command, _ in self.commands))
 
-    def test_signed_candidate_runs_same_pipeline_without_any_tag_or_publication(self):
-        with patch.dict(os.environ, {"CANDIDATE_MODE": "true"}):
-            report = self.accept()
-        self.assertTrue(report["candidate"])
-        self.assertTrue(report["steps"]["signing_proof"]["details"]["candidate"])
-        self.assertFalse(report["release_ready"])
-
-    def test_policy_enforces_signing_even_without_cli_upgrade_flag(self):
-        self.write("release-policy.json", {"schema": 1, "apple_notarized_versions": [self.config["version"]]})
-        self.assertTrue(self.accept(signing=False)["require_apple_signing"])
+    def test_signing_is_only_enabled_by_explicit_flag(self):
+        self.assertFalse(self.accept(signing=False)["require_apple_signing"])
 
     def test_unsigned_flow_still_runs_unpacked_unsigned_and_final_compiled_hosts(self):
         report = self.accept(signing=False)

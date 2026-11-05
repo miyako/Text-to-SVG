@@ -64,8 +64,6 @@ class Fixture(unittest.TestCase):
         self.write("template.json", json.dumps(self.config))
         self.write("package.json", json.dumps({"name": "Text-to-SVG", "version": "0.1.0"}))
         self.write("LICENSE", "MIT synthetic fixture\n")
-        self.write("release-policy.json", json.dumps({
-            "schema": 1, "version": "0.1.0", "requireAppleSigning": True}))
         self.component = self.root / "component/Text-to-SVG"
         self.write("component/Text-to-SVG/Project/Text-to-SVG.4DProject", "{}")
         for name, value in {
@@ -92,10 +90,9 @@ class Fixture(unittest.TestCase):
         self.runner = self.root / "runner"
         self.runner.mkdir()
         self.env = {
-            "GITHUB_ACTIONS": "true", "GITHUB_EVENT_NAME": "push",
-            "GITHUB_REPOSITORY": "miyako/Text-to-SVG", "GITHUB_REF": signing.CANDIDATE_REF,
+            "GITHUB_ACTIONS": "true", "GITHUB_EVENT_NAME": "workflow_dispatch",
+            "GITHUB_REPOSITORY": "miyako/Text-to-SVG", "GITHUB_REF": signing.PUBLISH_REF,
             "GITHUB_SHA": SHA, "RELEASE_SHA": SHA, "RELEASE_TAG": "0.1.0",
-            "CANDIDATE_MODE": "true", "CANDIDATE_REF": signing.CANDIDATE_REF,
             "RUNNER_TEMP": str(self.runner),
             "APPLE_DEVELOPER_ID_CERTIFICATE": base64.b64encode(b"fake PKCS12").decode(),
             "APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD": "fake-import-secret",
@@ -209,12 +206,13 @@ class Fixture(unittest.TestCase):
 
 
 class LifecycleTests(Fixture):
-    def test_signed_candidate_final_zip_from_dmg_and_unchanged_compilation(self):
+    def test_signed_final_zip_from_dmg_and_unchanged_compilation(self):
         original_zip = signing.sha256(self.archive)
         marker = (self.root / "build/compile-status.json").read_bytes()
         original = signing.snapshot(self.component)
         proof = self.run_sign()
-        self.assertTrue(proof["candidate"])
+        self.assertNotIn("candidate", proof)
+        self.assertEqual(proof["releaseTag"], "0.1.0")
         self.assertEqual(proof["sourceSHA"], SHA)
         self.assertEqual(proof["unsignedZIPHashSHA256"], original_zip)
         self.assertEqual(proof["unsignedCompileInputSHA256"], input_digest(self.root))
@@ -247,10 +245,11 @@ class LifecycleTests(Fixture):
         self.assertTrue(any(args[0] == signing.SPCTL and "context:primary-signature" in args
                             for args, _ in self.calls))
 
-    def test_release_resolves_tag_without_creating_it(self):
-        self.env.update(CANDIDATE_MODE="false", GITHUB_REF="refs/tags/0.1.0")
-        self.assertFalse(self.run_sign()["candidate"])
-        self.assertTrue(any("refs/tags/0.1.0^{commit}" in args for args, _ in self.calls))
+    def test_signing_requires_explicit_flag(self):
+        with patch.object(signing.platform, "system", return_value="Darwin"), \
+                patch.object(signing.subprocess, "run", side_effect=self.fake_run), \
+                self.assertRaisesRegex(signing.SigningError, "require-apple-signing"):
+            signing.sign_release(self.root, self.env)
 
     def test_unsigned_zip_must_exactly_match_compiled_package(self):
         self.archive.write_bytes(self.archive.read_bytes() + b"changed")
@@ -461,26 +460,13 @@ class LifecycleTests(Fixture):
             with self.assertRaises(signing.SigningError):
                 signing.certificate_bytes(secrets)
 
-    def test_policy_both_supported_shapes_and_invalid_types(self):
-        self.assertTrue(signing.release_policy(self.root))
-        self.write("release-policy.json", json.dumps({"schema": 1, "apple_notarized_versions": ["0.1.0"]}))
-        self.assertTrue(signing.release_policy(self.root))
-        self.write("release-policy.json", json.dumps({"schema": 1, "version": "0.1.0",
-                                                    "requireAppleSigning": "true"}))
-        with self.assertRaises(signing.SigningError):
-            signing.release_policy(self.root)
-        (self.root / "release-policy.json").unlink()
-        self.assertFalse(signing.release_policy(self.root))
-        with patch("builtins.print"):
-            self.assertTrue(signing.policy_command(self.root, {}, require_apple_signing=True))
-
-    def test_candidate_context_rejects_pr_and_ref_sha_mismatches(self):
+    def test_publish_context_rejects_pr_branch_tag_and_sha_mismatches(self):
         commands = signing.Commands(self.env, {})
         for changes in (
             {"GITHUB_EVENT_NAME": "pull_request"}, {"GITHUB_EVENT_NAME": "pull_request_target"},
-            {"GITHUB_EVENT_NAME": "workflow_dispatch"}, {"GITHUB_REF": "refs/heads/main"},
-            {"CANDIDATE_REF": "refs/heads/main"}, {"GITHUB_SHA": "b" * 40},
-            {"RELEASE_SHA": "b" * 40}, {"CANDIDATE_MODE": "yes"},
+            {"GITHUB_EVENT_NAME": "push"}, {"GITHUB_REF": "refs/heads/feature"},
+            {"GITHUB_REF": "refs/tags/0.1.0"}, {"RELEASE_SHA": "b" * 40},
+            {"RELEASE_TAG": "v0.1.0"}, {"RELEASE_TAG": ""},
         ):
             with self.subTest(changes=changes):
                 env = dict(self.env, **changes)

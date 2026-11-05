@@ -82,8 +82,7 @@ def release_tag(version):
 
 
 def release_tag_matches(tag, version):
-    """Accept the bare tag, plus legacy ``v``-prefixed tags of already published releases."""
-    return isinstance(tag, str) and tag in (release_tag(version), "v" + version)
+    return isinstance(tag, str) and tag == release_tag(version)
 
 
 def matrix(config):
@@ -318,8 +317,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("matrix", "validate", "assemble", "download-tool4d"))
     parser.add_argument("--root", type=Path, default=ROOT)
-    parser.add_argument("--release", action="store_true")
-    parser.add_argument("--tag", help="explicit normalized release tag (manual dispatch); defaults to GITHUB_REF_NAME")
     parser.add_argument("--url", help="optional official URL override, paired with --sha256")
     parser.add_argument("--sha256", help="optional approved hash override; otherwise env pair/package.json.tool")
     args = parser.parse_args()
@@ -328,14 +325,9 @@ def main():
             require_tool4d_host()
             print(download_tool4d(args.root, url=args.url, digest=args.sha256))
             return
-        if args.release and not os.environ.get("GITHUB_REPOSITORY"):
-            raise ValueError("GITHUB_REPOSITORY is required for release validation")
         config = load_config(
-            args.root, initialized=args.release or args.command == "assemble",
-            repository=os.environ.get("GITHUB_REPOSITORY"),
-            tag=(args.tag if args.tag is not None else os.environ.get("GITHUB_REF_NAME", "")) if args.release else None)
-        if args.release and os.environ.get("FOURD_ENABLED") != "true":
-            raise ValueError("releases require FOURD_ENABLED=true")
+            args.root, initialized=args.command == "assemble",
+            repository=os.environ.get("GITHUB_REPOSITORY"))
         if args.command == "matrix":
             value = json.dumps(matrix(config), separators=(",", ":"))
             print(value)

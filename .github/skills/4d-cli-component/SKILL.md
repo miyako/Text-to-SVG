@@ -45,10 +45,10 @@ scripts/tests. Resolve all paths below from the repository root, not this folder
    paths, `passed` / `failed` / `not_run` per check and blockers. Partial local success
    is **NOT release ready**. Do not publish or add credentials without approval.
    Unsigned free tool4d local compilation needs no license/signing secrets.
-   This destination's separately authorized signed candidate/release lifecycle
-   uses six Apple secrets, derives the matching identity, and requires explicit
-   notarization Accepted plus final signed-package host acceptance. See AGENTS.md.
-   Candidate verification never authorizes publication, tags or merging.
+   Releases happen only via **Actions → Publish → Run workflow → choose
+   patch/minor/major**: it bumps the version from the latest tag, commits it to
+   `main`, builds, signs/notarizes with six Apple secrets, host-tests the final
+   ZIP and creates the bare `X.Y.Z` tag and release. See AGENTS.md.
 
 ## Discovery is supported, invocation is not guaranteed
 

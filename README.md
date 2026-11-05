@@ -15,9 +15,9 @@ bitmaps, raster tracing, centerlines or G-code. No service or Node.js is used.
 
 This destination repository was adopted from
 [miyako/4d-component-template](https://github.com/miyako/4d-component-template).
-Neither upstream template is modified. Unsigned local acceptance and explicitly
-authorized signed-candidate verification do **not** authorize publication, tags,
-visibility changes or merging to the default branch.
+Neither upstream template is modified. Unsigned local acceptance does **not**
+authorize publication, tags, visibility changes or merging to the default branch.
+Releases are made only by the [Publish](#publish) workflow.
 See [AGENTS.md](AGENTS.md) for the adoption and acceptance gates.
 
 ## 4D quickstart
@@ -139,7 +139,7 @@ Success exits 0 with one JSON object plus LF on stdout:
 The numbers above illustrate the schema, not a font-independent vector.
 Failure exits 2, leaves stdout empty and emits a protocol-1
 `{"protocol":1,"error":{"code":"...","message":"..."}}` diagnostic plus LF on
-stderr. `--version` returns `{"protocol":1,"version":"0.1.1"}` plus LF.
+stderr. `--version` returns `{"protocol":1,"version":"<template.json version>"}` plus LF.
 `--echo <literal>` is a diagnostic argument-roundtrip command used by native
 4D host tests; it returns `{"protocol":1,"argument":"..."}`, not SVG.
 
@@ -193,19 +193,20 @@ python3 scripts/ci_config.py download-tool4d --root .
 python3 scripts/test_4d.py --root . --tool4d .tools/tool4d.app/Contents/MacOS/tool4d
 python3 scripts/compile_component.py --root . --tool4d .tools/tool4d.app/Contents/MacOS/tool4d
 python3 scripts/package_component.py --root . --repository miyako/Text-to-SVG \
-  --tag 0.1.1 --unpack-test
+  --tag "$(python3 -c 'import json; print(json.load(open("template.json"))["version"])')" --unpack-test
 python3 scripts/test_4d.py --root . --tool4d .tools/tool4d.app/Contents/MacOS/tool4d \
   --component build/release-test/Text-to-SVG.4dbase
 ```
 
 The `--tag` above validates identity only; it creates/pushes no tag.
 Free unsigned local tool4d compilation needs no activation or signing secrets.
-For build-only hosted source/compiled-package checks on this branch, dispatch
-the normal CI workflow with `run_4d=true`. This does not change `FOURD_ENABLED`,
-use Apple signing secrets, create tags or publish anything:
+For build-only hosted source/compiled-package checks on a branch, dispatch
+the normal CI workflow with `run_4d=true` (or set the Actions variable
+`FOURD_ENABLED=true`). This uses no Apple signing secrets, creates no tags and
+publishes nothing:
 
 ```sh
-gh workflow run ci.yml --ref miyako-text-to-svg-implementation -f run_4d=true
+gh workflow run ci.yml --ref BRANCH -f run_4d=true
 ```
 
 The `compiled-validation` CI artifact retains the unsigned patch ZIP and fresh
@@ -232,65 +233,55 @@ the package gates succeed, `dist/Text-to-SVG.zip` with adjacent
 `passed`, `failed` and `not_run` are distinct. Partial local acceptance is
 **not release ready**. Native Intel/Windows CLI and 4D execution,
 dependency-manager download/install and optional signing require separate
-evidence. No publication workflow should be dispatched before user review.
+evidence.
 
-## Signed candidate and release gates
+## Publish
 
-The signed lifecycle is now implemented, not merely configured through secrets.
-`release-policy.json` requires Apple notarization for versions `0.1.0` and `0.1.1`; the release
-workflow also explicitly requires signing, so there is no unsigned fallback.
-Unsigned `accept_local.py` remains available for development and preserves its
-honest partial-platform result.
+There are two workflows: **CI** (push/pull request validation) and **Publish**,
+the only release workflow. To release, open
+**Actions → Publish → Run workflow** on `main` and choose `mode`:
+`patch` (default), `minor` or `major`.
 
-The non-publishing candidate workflow runs only on an authorized push to
-`miyako-text-to-svg-implementation` whose commit message contains
-`[signed-candidate]`. It does not need a workflow merged to `main`, creates no
-tag/release, and has read-only repository permissions. Pull requests, forks and
-other branches cannot reach its secret-bearing job. Candidate and tag-release
-callers share `.github/workflows/signed-build.yml`, including the same native
-matrix and same-run manifest/artifact handoff.
+Publish then:
 
-Exactly six Actions secrets are required: `APPLE_DEVELOPER_ID_CERTIFICATE`
+1. Reads the latest stable release tag (bare `X.Y.Z`, or a legacy `vX.Y.Z`;
+   prerelease tags are ignored), bumps it per `mode` (for example `v0.1.1` →
+   `0.1.2` / `0.2.0` / `1.0.0`), and falls back to `template.json` when no tag
+   exists. `scripts/bump_version.py` writes that version into `template.json`,
+   `package.json`, `cli/CMakeLists.txt`, the `TextOutline` CLI-version check and
+   the host-test fixtures, and the workflow commits `Release X.Y.Z` to `main`.
+2. Reuses CI (`workflow_call`) to build and test the native CLI on macOS
+   Intel, macOS ARM64 and Windows x64 from that commit.
+3. On macOS 15 (`scripts/accept_hosted.py`): assembles Resources, runs the source
+   host, compiles with the pinned free tool4d, host-tests the unsigned compiled
+   ZIP, codesigns and notarizes it, and host-tests the exact signed ZIP.
+4. Creates the bare tag `X.Y.Z` (never `v`-prefixed) and a GitHub release named
+   `X.Y.Z` with `Text-to-SVG.zip`, `Text-to-SVG.dmg`, `Text-to-SVG-signing.json`
+   and `Text-to-SVG.acceptance.json`.
+
+A failed run can simply be re-run: the version files already match, so nothing
+new is committed, and no tag is created until every check has passed.
+
+Six Actions secrets are required: `APPLE_DEVELOPER_ID_CERTIFICATE`
 (base64 Developer ID Application P12 with private key),
 `APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD`, `KEYCHAIN_PASSWORD`,
 `NOTARYTOOL_APPLE_ID`, `NOTARYTOOL_PASSWORD` (app-specific), and
 `NOTARYTOOL_TEAM_ID`. The signing identity is derived from the imported
 certificate and checked against the configured team. There is no
-`CODESIGN_APPLE_ID` secret or normal Apple account password.
+`CODESIGN_APPLE_ID` secret or normal Apple account password. Secrets are only
+exposed to the macOS build job; only the final release job gets write access.
 
-The pipeline validates all three native build manifests, assembles Resources,
-runs the source host, requires clean structured compilation, and host-tests the
-unsigned compiled ZIP. It then signs an isolated extracted copy: the universal
-CLI and actual Mach-O component Libraries, not `.4DZ` data or arbitrary
-Resources. Developer ID, team, hardened runtime and secure timestamps are
-verified. Certificates/keychains live only in isolated runner-temporary storage,
-with `finally` cleanup and an independent `always()` workflow cleanup.
-
-A signed DMG is submitted to Apple; only explicit notarization `Accepted`
-permits stapling and staple validation. Rejection diagnostics are retained with
-credentials redacted. Every native payload is checked with strict signature
-verification and `codesign --check-notarization -R=notarized`; the signed DMG must
-pass Gatekeeper's open assessment. `spctl --type execute` is an app assessment
-and rejects bare CLI tools as "valid but does not seem to be an app", so it is
-not used as a standalone-CLI notarization test. The final dependency-manager ZIP
-is produced from the actual mounted,
-accepted/stapled DMG; **ZIP files cannot be stapled**. Pre-sign compiler and
-native provenance is preserved, while final-byte hashes are regenerated after
-signing/stapling.
-
-Finally the exact signed ZIP is unpacked and loaded by real tool4d with compiled
-mode required. `release_assets.py` checks the resulting adjacent evidence and
-every delivered byte before artifact upload or future publication. Outputs are
-`Text-to-SVG.zip`, `Text-to-SVG.dmg`, `Text-to-SVG-signing.json` and
-`Text-to-SVG.acceptance.json`. A signed candidate is not a published release:
-native Intel/Windows 4D, published dependency-manager installation and Windows
-Authenticode remain separate observations. Publication still needs explicit user
-approval, an existing matching immutable tag and the release opt-in gate.
-
-Release tags are bare SemVer without a `v` prefix (for example `0.1.2` or
-`0.2.0-rc.1`). The existing legacy `v0.1.0` and `v0.1.1` tags and releases are
-kept unchanged and still verify, but new `v`-prefixed tags are never generated
-and do not trigger or pass the release gate.
+Signing covers an isolated extracted copy: the universal CLI and actual Mach-O
+component Libraries, not `.4DZ` data or arbitrary Resources. Developer ID, team,
+hardened runtime and secure timestamps are verified. Certificates/keychains live
+only in isolated runner-temporary storage, with `finally` cleanup and an
+independent `always()` workflow cleanup. A signed DMG is submitted to Apple;
+only explicit notarization `Accepted` permits stapling. Every native payload is
+checked with `codesign --check-notarization -R=notarized`, and the DMG must pass
+Gatekeeper's open assessment. The dependency-manager ZIP is produced from the
+mounted, stapled DMG (**ZIP files cannot be stapled**). `release_assets.py`
+re-verifies every delivered byte against the adjacent evidence before release.
+Native Intel/Windows 4D loading and Windows Authenticode remain `not_run`.
 
 ## Licensing
 

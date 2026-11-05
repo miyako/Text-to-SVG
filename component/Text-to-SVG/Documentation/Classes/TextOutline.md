@@ -57,7 +57,7 @@ Decoded glyph counts must be integers from zero through 32768.
 
 ## version() : Object
 
-Executes `--version`, requiring exactly protocol 1 and version `"0.1.0"` in the
+Executes `--version`, requiring exactly protocol 1 and the component version (`template.json`) in the
 decoded `value`. The process envelope has the same shape as `convert`.
 
 ## Errors and execution

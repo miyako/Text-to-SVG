@@ -224,7 +224,7 @@ class DeliveryTests(unittest.TestCase):
             self.write_config()
 
     def test_bad_tag_or_semver(self):
-        for tag in ("0.2.0", "v0.2.0", "V0.1.0", "vv0.1.0", "0.1.0/../../escape"):
+        for tag in ("0.2.0", "v0.2.0", "v0.1.0", "V0.1.0", "vv0.1.0", "0.1.0/../../escape"):
             with self.subTest(tag=tag), self.assertRaisesRegex(ValueError, "tag"):
                 package_component.package(self.root, repository="owner/example-component", tag=tag)
         for version in ("01.1.0", "0.1", "0.1.0-01", "0.1.0\n", "0.1.0/escape"):
@@ -444,24 +444,15 @@ class DeliveryTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "or newer"):
                         build_cli.require_toolchain(language)
 
-    def test_release_requires_opt_in(self):
-        environment = {
-            "GITHUB_REPOSITORY": "owner/example-component", "GITHUB_REF_NAME": "0.1.0",
-            "FOURD_ENABLED": "false",
-        }
-        with patch.dict(os.environ, environment, clear=True), patch.object(
-                sys, "argv", ["ci_config.py", "validate", "--release", "--root", str(self.root)]):
+    def test_validate_checks_configuration_against_actual_repository(self):
+        with patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/example-component"}, clear=True), \
+                patch.object(sys, "argv", ["ci_config.py", "validate", "--root", str(self.root)]):
+            ci_config.main()
+        with patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/wrong"}, clear=True), \
+                patch.object(sys, "argv", ["ci_config.py", "validate", "--root", str(self.root)]):
             with self.assertRaises(SystemExit) as caught:
                 ci_config.main()
             self.assertEqual(caught.exception.code, 2)
-
-    def test_manual_release_validates_explicit_tag_not_selected_branch_name(self):
-        environment = {"GITHUB_REPOSITORY": "owner/example-component",
-                       "GITHUB_REF_NAME": "main", "FOURD_ENABLED": "true"}
-        with patch.dict(os.environ, environment, clear=True), patch.object(
-                sys, "argv", ["ci_config.py", "validate", "--release", "--tag", "0.1.0",
-                              "--root", str(self.root)]):
-            ci_config.main()
 
     def archive_bytes(self, name, data=b"tool4d", mode=stat.S_IFREG | 0o755):
         output = io.BytesIO()

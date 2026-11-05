@@ -1,6 +1,7 @@
 name: CI
 on:
   push:
+    branches: ['**']
   pull_request:
   workflow_dispatch:
     inputs:
@@ -10,29 +11,16 @@ on:
         default: false
   workflow_call:
     inputs:
-      source_sha:
-        description: Exact normalized commit to build
+      ref:
+        description: Commit to build (used by Publish, which runs its own 4D checks)
         type: string
-        default: ''
-      release_call:
-        description: Release caller performs mandatory 4D acceptance separately
-        type: boolean
-        default: false
-      run_4d:
-        description: Explicit build-only 4D validation, without enabling publication
-        type: boolean
-        default: false
+        required: true
 
 permissions:
   contents: read
 
 jobs:
   configuration:
-    if: >-
-      github.event_name != 'push' ||
-      (!contains(github.event.head_commit.message, '[signed-candidate]') &&
-       !contains(github.event.head_commit.message, '[verify-prerelease]')) ||
-      inputs.source_sha != ''
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.configuration.outputs.matrix }}
@@ -41,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.source_sha || github.sha }}
+          ref: ${{ inputs.ref || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -69,7 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.source_sha || github.sha }}
+          ref: ${{ inputs.ref || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -101,12 +89,13 @@ jobs:
 
   assembly:
     needs: [configuration, native]
-    if: needs.configuration.outputs.initialized == 'true'
+    # Publish (workflow_call) assembles, compiles and host-tests in its own signed job.
+    if: needs.configuration.outputs.initialized == 'true' && !inputs.ref
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.source_sha || github.sha }}
+          ref: ${{ inputs.ref || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -132,21 +121,21 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Download pinned free tool4D for optional branch and PR integration tests
-        if: (vars.FOURD_ENABLED == 'true' || inputs.run_4d) && github.ref_type != 'tag' && !inputs.release_call
+        if: (vars.FOURD_ENABLED == 'true' || inputs.run_4d)
         env:
           TOOL4D_URL: ${{ vars.TOOL4D_URL }}
           TOOL4D_SHA256: ${{ vars.TOOL4D_SHA256 }}
         run: python scripts/ci_config.py download-tool4d
       - name: Test interpreted component from a real 4D host
-        if: (vars.FOURD_ENABLED == 'true' || inputs.run_4d) && github.ref_type != 'tag' && !inputs.release_call
+        if: (vars.FOURD_ENABLED == 'true' || inputs.run_4d)
         run: |
           python scripts/test_4d.py --tool4d .tools/tool4d.app/Contents/MacOS/tool4d
           cp build/host-status.json build/source-host-status.json
       - name: Compile both 4D targets
-        if: (vars.FOURD_ENABLED == 'true' || inputs.run_4d) && github.ref_type != 'tag' && !inputs.release_call
+        if: (vars.FOURD_ENABLED == 'true' || inputs.run_4d)
         run: python scripts/compile_component.py --tool4d .tools/tool4d.app/Contents/MacOS/tool4d
       - name: Package and test the actual compiled component
-        if: (vars.FOURD_ENABLED == 'true' || inputs.run_4d) && github.ref_type != 'tag' && !inputs.release_call
+        if: (vars.FOURD_ENABLED == 'true' || inputs.run_4d)
         shell: python
         run: |
           import hashlib, json, os, shutil, subprocess, sys
@@ -177,7 +166,7 @@ jobs:
           }
           (ROOT / "build/host-validation.json").write_text(json.dumps(report, indent=2) + "\n")
       - name: Retain build-only compiled package and host evidence
-        if: always() && (vars.FOURD_ENABLED == 'true' || inputs.run_4d) && github.ref_type != 'tag' && !inputs.release_call
+        if: always() && (vars.FOURD_ENABLED == 'true' || inputs.run_4d)
         uses: actions/upload-artifact@v4
         with:
           name: compiled-validation

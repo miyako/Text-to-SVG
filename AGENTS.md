@@ -465,35 +465,38 @@ failed status/phase reports. This is a starter identity/wiring regression,
 **not** evidence that UUIDv7 or any other new feature was implemented.
 
 `--tag` validates package/version identity; it does not create/push/publish a tag.
-For approved hosted publication only, set Actions **variable**
-`FOURD_ENABLED=true`; `TOOL4D_URL` / `TOOL4D_SHA256` are optional paired overrides
-of the approved public `package.json.tool` pin, not required secrets. Push the matching
-bare `<version>` tag (e.g. `0.1.2`, `0.2.0-rc.1`; **no `v` prefix**). Release jobs build same-tag native resources, compile after
-assembly and host-test the unpacked package before publishing `<repository>.zip`.
-Only publication receives built-in `GITHUB_TOKEN` write permission; no personal
-token/version-bot commit is required.
+`TOOL4D_URL` / `TOOL4D_SHA256` Actions variables are optional paired overrides
+of the approved public `package.json.tool` pin, not required secrets.
 
-### Manual Actions dispatch and existing-tag release
+### CI and the single Publish workflow
 
-After the dispatch-capable workflow is merged to the **default branch**, open
-**Actions → CI → Run workflow** and select a branch for ordinary validation.
-`FOURD_ENABLED` still controls optional hosted 4D steps; CLI-only green is not
-compiled-host green.
+There are exactly two workflows. **CI** (`ci.yml`) validates pushes and pull
+requests; **Actions → CI → Run workflow** with `run_4d=true` (or the Actions
+variable `FOURD_ENABLED=true`) adds build-only source/compiled-package 4D host
+checks. CLI-only green is not compiled-host green.
 
-**Actions → Release compiled component → Run workflow** requires
-`version_tag`, an **already existing** bare `<SemVer>` tag (no `v` prefix) matching the initialized
-repository's `template.json.version` / `package.json.version`. It creates no
-tag. The gate resolves/peels that tag to a commit SHA, validates source at that
-SHA, and all reusable native CI, assembly, compilation and publication jobs use
-that exact SHA—not the selected UI branch. Packaging receives the normalized
-tag explicitly. Publication refreshes and verifies the tag has not moved, uses
-`--verify-tag`, and remains blocked by compilation or final host failure.
-Do not manually dispatch publication or create a tag without user permission.
-Release tags are bare SemVer (`X.Y.Z`, `X.Y.Z-rc.N`); never generate a new
-`v`-prefixed tag. Legacy `v0.1.0`/`v0.1.1` tags and releases stay untouched:
-verification (`release_ref.py verify`, `verify-release.yml`) still accepts
-them, while the release trigger/gate and publication accept only bare tags.
-The new workflow is not available in the default template before its PR merges.
+**Publish** (`publish.yml`) is the only release workflow:
+**Actions → Publish → Run workflow → choose `patch` / `minor` / `major`** on
+`main`. It has no other inputs and no tag-push trigger. It:
+
+1. computes the next version with `scripts/bump_version.py` from the latest
+   stable tag (bare `X.Y.Z` or legacy `vX.Y.Z`; prerelease tags ignored; with no
+   tags, `template.json.version` is bumped), rewrites every version literal
+   (`template.json`, `package.json`, CLI `CMakeLists.txt`, the feature class's
+   CLI-version check, host Smoke/contract fixtures) and commits `Release X.Y.Z`
+   to `main`;
+2. reuses CI through `workflow_call` to build/test all three native CLIs from
+   that commit;
+3. runs `scripts/accept_hosted.py --require-apple-signing` on macOS 15: assembly,
+   source host, compilation, unsigned compiled host, codesign + notarization,
+   final signed compiled host;
+4. creates the bare tag `X.Y.Z` (never `v`-prefixed) and the GitHub release
+   `X.Y.Z` with the signed ZIP/DMG and evidence via `release_assets.py --publish`.
+
+Signing secrets reach only the macOS build job; only the final release job has
+`contents: write`. A failed run is safely re-runnable: the version commit is a
+no-op the second time and no tag exists until every gate passes. Do not dispatch
+Publish, create tags or delete releases without user permission.
 
 ## 7. Report evidence, not assumptions
 
@@ -520,7 +523,7 @@ artifact/report paths and unvalidated checks. Never describe an Apple Silicon
 local package as fully cross-platform accepted. Partial acceptance is **NOT
 release ready**; publication requires all mandatory gates. Optional unsigned
 signing status alone is not a blocker for the unsigned development pipeline.
-Text-to-SVG's separately authorized signed candidate/release pipeline requires
+Text-to-SVG's Publish workflow requires
 signing, notarization and final-package verification; see section 8 and README.
 Report the **actual** compiler used: Go **1.25.1** was available in the local
 November 1 observation, whereas **1.26.10** is the CI pin and the source minimum
@@ -562,10 +565,10 @@ For a requested local implementation, finish the feature, replace every
 greeting-specific surface, run exact feature/error tests, validate licenses and
 resources, compile fresh, and load the **exact final ZIP's** unpacked component.
 Report unsupported/unavailable checks as `not_run`; local success remains
-`release_ready:false`. Approved publication additionally requires the existing
-matching tag, all required native artifact/tests, hosted 4D opt-in and the final
-package-host gate. Signing remains optional for unsigned local development, but
-is mandatory for this destination's signed candidate and release workflows.
+`release_ready:false`. Publication happens only through the Publish workflow,
+which runs all native artifact/tests, compilation, signing and the final
+package-host gate before tagging. Signing remains optional for unsigned local
+development, but is mandatory in Publish.
 
 The final handoff must identify the repository/namespace/class/CLI/language,
 revision and input provenance, exact commands/results, tool versions, stable ZIP
@@ -636,13 +639,10 @@ container/Apple `Contents/` layout requires deliberate packaging changes.
 
 ### Text-to-SVG signed lifecycle and six Apple secrets
 
-The destination now implements the explicitly authorized signed lifecycle.
-`release-policy.json` lists `0.1.0`; the shared `signed-build.yml` additionally
-requires signing without an unsigned fallback. The trusted push-only
-`signing-candidate.yml` is non-publishing; the existing-tag release caller uses
-the identical build/sign/final-host path before publication.
-No secret below is required by the free local compiler or unsigned local
-acceptance. Candidate execution does not authorize a tag, release or main merge.
+The Publish workflow always signs (`--require-apple-signing`), with no unsigned
+fallback and no per-version policy file; `sign_release.py sign` refuses to run
+outside a `workflow_dispatch` on `main`. No secret below is required by the free
+local compiler or unsigned local acceptance.
 
 The signer derives the Developer ID Application identity from the imported
 certificate and configured team: **do not add CODESIGN_APPLE_ID**. It signs real
