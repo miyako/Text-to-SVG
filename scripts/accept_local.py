@@ -61,7 +61,7 @@ def accept(root, repository, tool4d, cross=False):
             environment["TEST_CLI_LANGUAGE"] = config["language"]
             subprocess.run(arguments, cwd=root, env=environment, check=True, timeout=900)
         step("unit", lambda: run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"]))
-        step("icons", lambda: run([sys.executable, "scripts/generate_icons.py", "--check"]))
+        step("icons", lambda: run([sys.executable, "scripts/validate_icons.py"]))
         targets = TARGETS if cross else (native,)
         for target in targets:
             step("cli_build_" + target, lambda target=target: build(root, target, cross=cross))

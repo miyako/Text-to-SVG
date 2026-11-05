@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Rasterize the original rectangle/polygon SVG and embed the PNG into a 64x64 SVG."""
+"""Optional bootstrap: rasterize assets/icon-source.svg into starter icons.
+
+Committed Resources/logo.png and logo.svg are the source of truth and may be
+custom artwork. This helper only creates icons that are missing; it never
+overwrites existing files. Validate committed icons with validate_icons.py.
+"""
 import argparse
 import base64
 import json
@@ -68,32 +73,31 @@ def render(source):
             + chunk(b"IEND", b""))
 
 
-def generate(root, check=False):
+def generate(root):
     root = Path(root)
     config = json.loads((root / "template.json").read_text())
     directory = root / "component" / config["repository"] / "Resources"
+    targets = [directory / "logo.png", directory / "logo.svg"]
+    existing = [str(path) for path in targets if path.exists()]
+    if existing:
+        raise ValueError("refusing to overwrite existing icons: " + ", ".join(existing))
     source = (root / "assets" / "icon-source.svg").read_bytes()
     png = render(source)
     svg = ('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="64" height="64" viewport-fill-opacity="0">\n'
            '  <image x="0" y="0" width="64" height="64" xlink:href="data:image/png;base64,'
            + base64.b64encode(png).decode("ascii") + '"/>\n</svg>\n').encode("ascii")
-    for name, content in (("logo.png", png), ("logo.svg", svg)):
-        path = directory / name
-        if check:
-            if not path.is_file() or path.read_bytes() != content:
-                raise ValueError("icon is missing or stale: " + str(path))
-        else:
-            directory.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(content)
+    directory.mkdir(parents=True, exist_ok=True)
+    for path, content in zip(targets, (png, svg)):
+        with open(path, "xb") as handle:
+            handle.write(content)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT)
-    parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     try:
-        generate(args.root, args.check)
+        generate(args.root)
     except (ValueError, OSError, ET.ParseError) as error:
         print(error, file=sys.stderr)
         return 1

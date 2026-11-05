@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 import unittest
 import uuid
@@ -118,31 +119,61 @@ class InitializerTests(unittest.TestCase):
 
 
 class IconTests(unittest.TestCase):
-    def test_png_is_real_rgba_and_exact_svg_payload(self):
-        import base64
-        import struct
-        import zlib
-        name = json.loads((ROOT / "template.json").read_text())["repository"]
-        resources = ROOT / "component" / name / "Resources"
-        png = (resources / "logo.png").read_bytes()
-        self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
-        self.assertEqual(struct.unpack(">IIBBBBB", png[16:29]), (1024, 1024, 8, 6, 0, 0, 0))
-        position = 8
-        compressed = b""
-        kinds = []
-        while position < len(png):
-            length = struct.unpack(">I", png[position:position + 4])[0]
-            kind = png[position + 4:position + 8]
-            payload = png[position + 8:position + 8 + length]
-            checksum = struct.unpack(">I", png[position + 8 + length:position + 12 + length])[0]
-            self.assertEqual(checksum, zlib.crc32(kind + payload) & 0xffffffff)
-            kinds.append(kind)
-            if kind == b"IDAT":
-                compressed += payload
-            position += length + 12
-        self.assertEqual(kinds, [b"IHDR", b"IDAT", b"IEND"])
-        self.assertEqual(len(zlib.decompress(compressed)), 1024 * (1 + 1024 * 4))
-        svg = ET.parse(resources / "logo.svg").getroot()
-        href = svg[0].attrib["{http://www.w3.org/1999/xlink}href"]
-        self.assertTrue(href.startswith("data:image/png;base64,"))
-        self.assertEqual(base64.b64decode(href.split(",", 1)[1], validate=True), png)
+    """Committed icons are custom artwork; only structural validity is required."""
+
+    def setUp(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import validate_icons
+        import generate_icons
+        self.validate_icons = validate_icons
+        self.generate_icons = generate_icons
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        (self.root / "template.json").write_text(json.dumps({"repository": "Icons"}))
+        self.resources = self.root / "component/Icons/Resources"
+        self.resources.mkdir(parents=True)
+        (self.root / "assets").mkdir()
+        shutil.copy(ROOT / "assets/icon-source.svg", self.root / "assets/icon-source.svg")
+
+    def tearDown(self):
+        sys.path.remove(str(ROOT / "scripts"))
+        self.temp.cleanup()
+
+    def test_committed_icons_are_valid(self):
+        self.validate_icons.validate(ROOT)
+
+    def test_custom_icons_accepted_without_matching_generator(self):
+        png = (ROOT / "component" / json.loads((ROOT / "template.json").read_text())["repository"]
+               / "Resources/logo.png").read_bytes()
+        (self.resources / "logo.png").write_bytes(png)
+        (self.resources / "logo.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
+        self.validate_icons.validate(self.root)
+
+    def test_invalid_icons_rejected(self):
+        good = ROOT / "component" / json.loads((ROOT / "template.json").read_text())["repository"] / "Resources"
+        cases = [
+            ("logo.png", b"not a png", "signature"),
+            ("logo.png", (good / "logo.png").read_bytes()[:20], "truncated"),
+            ("logo.png", (good / "logo.png").read_bytes()[:29] + b"\0\0\0\0", "checksum"),
+            ("logo.svg", b"<svg", "."),
+            ("logo.svg", b"<html/>", "not an SVG"),
+        ]
+        for name, content, message in cases:
+            with self.subTest(name=name, message=message):
+                shutil.copy(good / "logo.png", self.resources / "logo.png")
+                (self.resources / "logo.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
+                (self.resources / name).write_bytes(content)
+                with self.assertRaisesRegex(Exception, message):
+                    self.validate_icons.validate(self.root)
+        (self.resources / "logo.svg").unlink()
+        with self.assertRaisesRegex(ValueError, "missing"):
+            self.validate_icons.validate(self.root)
+
+    def test_generator_bootstraps_but_never_overwrites(self):
+        self.generate_icons.generate(self.root)
+        self.validate_icons.validate(self.root)
+        custom = b"custom"
+        (self.resources / "logo.png").write_bytes(custom)
+        with self.assertRaisesRegex(ValueError, "refusing to overwrite"):
+            self.generate_icons.generate(self.root)
+        self.assertEqual((self.resources / "logo.png").read_bytes(), custom)
