@@ -193,7 +193,7 @@ python3 scripts/ci_config.py download-tool4d --root .
 python3 scripts/test_4d.py --root . --tool4d .tools/tool4d.app/Contents/MacOS/tool4d
 python3 scripts/compile_component.py --root . --tool4d .tools/tool4d.app/Contents/MacOS/tool4d
 python3 scripts/package_component.py --root . --repository miyako/Text-to-SVG \
-  --tag v0.1.1 --unpack-test
+  --tag 0.1.1 --unpack-test
 python3 scripts/test_4d.py --root . --tool4d .tools/tool4d.app/Contents/MacOS/tool4d \
   --component build/release-test/Text-to-SVG.4dbase
 ```
@@ -286,6 +286,11 @@ every delivered byte before artifact upload or future publication. Outputs are
 native Intel/Windows 4D, published dependency-manager installation and Windows
 Authenticode remain separate observations. Publication still needs explicit user
 approval, an existing matching immutable tag and the release opt-in gate.
+
+Release tags are bare SemVer without a `v` prefix (for example `0.1.2` or
+`0.2.0-rc.1`). The existing legacy `v0.1.0` and `v0.1.1` tags and releases are
+kept unchanged and still verify, but new `v`-prefixed tags are never generated
+and do not trigger or pass the release gate.
 
 ## Licensing
 

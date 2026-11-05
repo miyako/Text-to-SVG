@@ -32,7 +32,7 @@ import time
 import uuid
 import zipfile
 
-from ci_config import ROOT, SEMVER, load_config
+from ci_config import ROOT, SEMVER, load_config, release_tag
 import package_component
 
 # MIT lifecycle: miyako/4d-component-template, commit
@@ -397,7 +397,7 @@ def prepare_payload(root, scratch, config, unsigned):
     marker["project"] = "component/" + config["repository"] + "/Project/" + config["repository"] + ".4DProject"
     (mirror / "build/compile-status.json").write_text(json.dumps(marker), encoding="utf-8")
     expected = package_component.package(
-        mirror, repository="owner/" + config["repository"], tag="v" + config["version"])
+        mirror, repository="owner/" + config["repository"], tag=release_tag(config["version"]))
     if expected.read_bytes() != unsigned.read_bytes():
         raise SigningError("unsigned ZIP does not match freshly compiled package inputs")
     unpacked = package_component.unpack_for_test(mirror, unsigned)

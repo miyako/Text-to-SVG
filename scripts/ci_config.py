@@ -71,9 +71,19 @@ def load_config(root=ROOT, *, initialized=False, repository=None, tag=None):
             raise ValueError("repository identity must be owner/name")
         if repository.split("/")[1] != config["repository"]:
             raise ValueError("actual repository does not match template.json")
-    if tag is not None and tag != "v" + config["version"]:
-        raise ValueError("release tag must equal v<template.json version>")
+    if tag is not None and not release_tag_matches(tag, config["version"]):
+        raise ValueError("release tag must equal the bare <template.json version>")
     return config
+
+
+def release_tag(version):
+    """New release tags are bare SemVer (``1.2.3``); a ``v`` prefix is never generated."""
+    return version
+
+
+def release_tag_matches(tag, version):
+    """Accept the bare tag, plus legacy ``v``-prefixed tags of already published releases."""
+    return isinstance(tag, str) and tag in (release_tag(version), "v" + version)
 
 
 def matrix(config):

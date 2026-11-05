@@ -10,7 +10,7 @@ import subprocess
 import sys
 
 from build_provenance import commit, sha256, verify
-from ci_config import ROOT, TARGETS, assemble, load_config, require_tool4d_host
+from ci_config import ROOT, TARGETS, assemble, load_config, release_tag, release_tag_matches, require_tool4d_host
 from compile_component import compile_component
 from native_dependencies import inspect
 from package_component import package, unpack_for_test, validate_compile
@@ -71,7 +71,8 @@ def accept(root, repository, tool4d, tag=None, require_apple_signing=False):
             raise ValueError("hosted acceptance requires a source commit")
         if os.environ.get("RELEASE_SHA", revision) != revision:
             raise ValueError("RELEASE_SHA differs from the checked-out source")
-        if os.environ.get("RELEASE_TAG", tag or "v" + config["version"]) != "v" + config["version"]:
+        if not release_tag_matches(os.environ.get("RELEASE_TAG", tag or release_tag(config["version"])),
+                                   config["version"]):
             raise ValueError("RELEASE_TAG differs from the configured version")
         require_tool4d_host()
         tool = Path(tool4d).absolute()
@@ -125,7 +126,7 @@ def accept(root, repository, tool4d, tag=None, require_apple_signing=False):
         marker = root / "build/compile-status.json"
         marker_hash = sha256(marker)
         archive = step("package", lambda: package(
-            root, repository=repository, tag=tag or "v" + config["version"]))
+            root, repository=repository, tag=tag or release_tag(config["version"])))
         regular(archive)
         report["unsigned_artifact"] = asset_record(root, archive)
         step("unsigned_compiled_host", lambda: host(

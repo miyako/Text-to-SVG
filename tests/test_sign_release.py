@@ -88,13 +88,13 @@ class Fixture(unittest.TestCase):
             "input_sha256": input_digest(self.root), "output_sha256": output_digest(self.component),
         }))
         self.archive = signing.package_component.package(
-            self.root, repository="miyako/Text-to-SVG", tag="v0.1.0")
+            self.root, repository="miyako/Text-to-SVG", tag="0.1.0")
         self.runner = self.root / "runner"
         self.runner.mkdir()
         self.env = {
             "GITHUB_ACTIONS": "true", "GITHUB_EVENT_NAME": "push",
             "GITHUB_REPOSITORY": "miyako/Text-to-SVG", "GITHUB_REF": signing.CANDIDATE_REF,
-            "GITHUB_SHA": SHA, "RELEASE_SHA": SHA, "RELEASE_TAG": "v0.1.0",
+            "GITHUB_SHA": SHA, "RELEASE_SHA": SHA, "RELEASE_TAG": "0.1.0",
             "CANDIDATE_MODE": "true", "CANDIDATE_REF": signing.CANDIDATE_REF,
             "RUNNER_TEMP": str(self.runner),
             "APPLE_DEVELOPER_ID_CERTIFICATE": base64.b64encode(b"fake PKCS12").decode(),
@@ -248,9 +248,9 @@ class LifecycleTests(Fixture):
                             for args, _ in self.calls))
 
     def test_release_resolves_tag_without_creating_it(self):
-        self.env.update(CANDIDATE_MODE="false", GITHUB_REF="refs/tags/v0.1.0")
+        self.env.update(CANDIDATE_MODE="false", GITHUB_REF="refs/tags/0.1.0")
         self.assertFalse(self.run_sign()["candidate"])
-        self.assertTrue(any("refs/tags/v0.1.0^{commit}" in args for args, _ in self.calls))
+        self.assertTrue(any("refs/tags/0.1.0^{commit}" in args for args, _ in self.calls))
 
     def test_unsigned_zip_must_exactly_match_compiled_package(self):
         self.archive.write_bytes(self.archive.read_bytes() + b"changed")

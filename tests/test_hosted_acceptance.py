@@ -114,7 +114,7 @@ class HostedFixture:
         unsigned = json.loads((self.root / "build/hosted-acceptance.json").read_text())["unsigned_artifact"]
         proof = {
             "schema": 1, "version": self.config["version"], "sourceSHA": SHA,
-            "releaseTag": "v" + self.config["version"],
+            "releaseTag": self.config["version"],
             "candidate": os.environ.get("CANDIDATE_MODE", "").lower() == "true",
             "unsignedCompileInputSHA256": self.marker["input_sha256"],
             "unsignedZIPHashSHA256": unsigned["sha256"],
@@ -159,7 +159,7 @@ class HostedFixture:
         self.addCleanup(stack.close)
         stack.enter_context(patch.dict(os.environ, {
             "CANDIDATE_MODE": "false", "RELEASE_SHA": SHA,
-            "RELEASE_TAG": "v" + self.config["version"], "NOTARYTOOL_TEAM_ID": TEAM,
+            "RELEASE_TAG": self.config["version"], "NOTARYTOOL_TEAM_ID": TEAM,
         }))
         stack.enter_context(patch.object(hosted, "commit", return_value=SHA))
         stack.enter_context(patch.object(build_provenance, "commit", return_value=SHA))
@@ -183,7 +183,7 @@ class HostedFixture:
 
     def accept(self, signing=True):
         return hosted.accept(self.root, "miyako/" + self.name, self.tool,
-                             "v" + self.config["version"], signing)
+                             self.config["version"], signing)
 
 
 class HostedAcceptanceTests(HostedFixture, unittest.TestCase):
