@@ -6,7 +6,7 @@ if(POLICY CMP0135)
 endif()
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum supported macOS")
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-project(text-to-svg VERSION 0.1.1 LANGUAGES C CXX)
+project(text-to-svg VERSION 0.1.2 LANGUAGES C CXX)
 
 include(FetchContent)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
