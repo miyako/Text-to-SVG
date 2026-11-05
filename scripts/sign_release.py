@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """Fail-closed Apple signing of a compiled release, notarized through a DMG.
 
-`policy` is secret-free and platform independent; absent policy means unsigned.
-`sign` requires macOS GitHub Actions, a trusted release/candidate ref, and six
-credentials. It never signs the source component or treats a .4dbase as an app.
-Both commands accept --require-apple-signing, which can only upgrade policy.
-RELEASE_TAG/RELEASE_SHA override the workflow ref/SHA for manual tag releases;
-the checked-out HEAD must equal the resolved release commit.
+`sign` requires the Publish workflow (workflow_dispatch on main) on macOS GitHub
+Actions, --require-apple-signing and six credentials. It never signs the source
+component or treats a .4dbase as an app. RELEASE_TAG is the new bare version
+about to be published; RELEASE_SHA must equal the checked-out HEAD.
 The resulting ZIP is copied from the accepted, stapled, mounted DMG; the ZIP
 itself cannot be stapled. The caller must still run the real compiled host test.
 `cleanup` needs only RUNNER_TEMP and recovers the isolated signing directory.
@@ -51,7 +49,7 @@ XCRUN = "/usr/bin/xcrun"
 GIT = "/usr/bin/git"
 SPCTL = "/usr/sbin/spctl"
 TRUSTED_TOOLS = {SECURITY, CODESIGN, HDIUTIL, XCRUN, GIT, SPCTL}
-CANDIDATE_REF = "refs/heads/miyako-text-to-svg-implementation"
+PUBLISH_REF = "refs/heads/main"
 
 
 class SigningError(ValueError):
@@ -77,42 +75,6 @@ def redact(text, secrets):
     for value in sorted((value for value in values if value), key=len, reverse=True):
         text = text.replace(value, "[REDACTED]")
     return re.sub(r"https?:(?:/|\\/){2}[^\s<>\"']+", "[REDACTED URL]", text)
-
-
-def release_policy(root=ROOT):
-    config = load_config(root, initialized=True)
-    path = Path(root) / "release-policy.json"
-    if not path.exists() and not path.is_symlink():
-        return False
-    if path.is_symlink() or not path.is_file():
-        raise SigningError("release-policy.json must be a regular file")
-    policy = json.loads(path.read_text(encoding="utf-8"))
-    if (not isinstance(policy, dict) or type(policy.get("schema")) is not int
-            or policy["schema"] != 1):
-        raise SigningError("invalid release-policy.json schema")
-    if set(policy) == {"schema", "version", "requireAppleSigning"}:
-        if (policy["version"] != config["version"]
-                or type(policy["requireAppleSigning"]) is not bool):
-            raise SigningError("invalid version signing policy")
-        return policy["requireAppleSigning"]
-    if (set(policy) != {"schema", "apple_notarized_versions"}
-            or not isinstance(policy["apple_notarized_versions"], list)):
-        raise SigningError("invalid release-policy.json schema")
-    versions = policy["apple_notarized_versions"]
-    if (any(not isinstance(version, str) or not re.fullmatch(SEMVER, version, re.ASCII)
-            for version in versions) or len(set(versions)) != len(versions)):
-        raise SigningError("invalid apple_notarized_versions")
-    return config["version"] in versions
-
-
-def policy_command(root=ROOT, env=None, *, require_apple_signing=False):
-    env = os.environ if env is None else env
-    enabled = release_policy(root) or require_apple_signing
-    if env.get("GITHUB_OUTPUT"):
-        with Path(env["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
-            output.write("apple_signing=" + str(enabled).lower() + "\n")
-    print("apple-notarized" if enabled else "unsigned")
-    return enabled
 
 
 def credentials(env):
@@ -613,35 +575,18 @@ def zip_from_mount(commands, dmg, scratch, staged, signed_paths, secrets, config
 
 
 def trusted_context(root, env, commands):
-    if env.get("GITHUB_EVENT_NAME") not in {"push", "workflow_dispatch"}:
-        raise SigningError("untrusted signing event; pull requests cannot sign")
-    tag = env.get("RELEASE_TAG") or env.get("GITHUB_REF_NAME")
+    if env.get("GITHUB_EVENT_NAME") != "workflow_dispatch" or env.get("GITHUB_REF") != PUBLISH_REF:
+        raise SigningError("signing runs only from the Publish workflow on main; pull requests cannot sign")
+    tag = env.get("RELEASE_TAG")
+    if not isinstance(tag, str) or not re.fullmatch(SEMVER, tag, flags=re.ASCII):
+        raise SigningError("RELEASE_TAG must be the bare SemVer being published")
     source_sha = env.get("RELEASE_SHA")
     if not isinstance(source_sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", source_sha):
         raise SigningError("sign requires resolved RELEASE_SHA")
     head, _ = commands.run("source HEAD", [GIT, "rev-parse", "HEAD"], cwd=root)
     if head.strip().lower() != source_sha.lower():
         raise SigningError("source HEAD does not match the resolved release commit")
-    candidate = env.get("CANDIDATE_MODE", "false")
-    if candidate not in {"true", "false"}:
-        raise SigningError("invalid CANDIDATE_MODE")
-    if candidate == "true":
-        if (env.get("CANDIDATE_REF") != CANDIDATE_REF
-                or env.get("GITHUB_REF") != CANDIDATE_REF
-                or env.get("GITHUB_EVENT_NAME") != "push"
-                or env.get("GITHUB_SHA", "").lower() != source_sha.lower()):
-            raise SigningError("candidate ref, event or SHA mismatch")
-    else:
-        if (env.get("GITHUB_EVENT_NAME") == "push"
-                and (env.get("GITHUB_REF") != "refs/tags/" + str(tag)
-                     or env.get("GITHUB_SHA", "").lower() != source_sha.lower())):
-            raise SigningError("release push must match its tag and SHA")
-        # Candidate mode deliberately does not resolve or create any actual tag.
-        actual, _ = commands.run("release tag commit", [
-            GIT, "rev-parse", "--verify", "refs/tags/" + str(tag) + "^{commit}"], cwd=root)
-        if actual.strip().lower() != source_sha.lower():
-            raise SigningError("release tag does not identify checked-out HEAD")
-    return tag, source_sha.lower(), candidate == "true"
+    return tag, source_sha.lower()
 
 
 def sign_release(root=ROOT, env=None, *, require_apple_signing=False):
@@ -650,13 +595,13 @@ def sign_release(root=ROOT, env=None, *, require_apple_signing=False):
     if platform.system() != "Darwin" or env.get("GITHUB_ACTIONS") != "true":
         raise SigningError("sign requires macOS GitHub Actions")
     commands = Commands(env, {})
-    tag, source_sha, candidate = trusted_context(root, env, commands)
+    tag, source_sha = trusted_context(root, env, commands)
     if not env.get("GITHUB_REPOSITORY") or not tag:
         raise SigningError("sign requires actual GITHUB_REPOSITORY and release tag")
     config = load_config(root, initialized=True, repository=env["GITHUB_REPOSITORY"],
                          tag=tag)
-    if not (release_policy(root) or require_apple_signing):
-        raise SigningError("current release is not opted in to Apple notarization")
+    if not require_apple_signing:
+        raise SigningError("signing requires explicit --require-apple-signing")
     secrets = credentials(env)
     commands.secrets = secrets
     data = certificate_bytes(secrets)
@@ -719,7 +664,7 @@ def sign_release(root=ROOT, env=None, *, require_apple_signing=False):
             final_zip = zip_from_mount(commands, dmg, scratch, staged, relative_paths, secrets, config, identity)
             proof = {
                 "schema": 1, "version": config["version"], "sourceSHA": source_sha.lower(),
-                "releaseTag": tag, "candidate": candidate,
+                "releaseTag": tag,
                 "unsignedCompileInputSHA256": digest, "unsignedZIPHashSHA256": unsigned_hash,
                 "signedFiles": [{"path": path, "sha256": sha256(staged / path),
                                  "verified": True, "signatures": signatures[path]}
@@ -767,15 +712,13 @@ def sign_release(root=ROOT, env=None, *, require_apple_signing=False):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("policy", "sign", "cleanup"))
+    parser.add_argument("command", choices=("sign", "cleanup"))
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--require-apple-signing", action="store_true",
-                        help="require signing in addition to version policy; never permits a downgrade")
+                        help="mandatory for sign; signing never happens implicitly")
     args = parser.parse_args(argv)
     try:
-        if args.command == "policy":
-            policy_command(args.root, require_apple_signing=args.require_apple_signing)
-        elif args.command == "sign":
+        if args.command == "sign":
             sign_release(args.root, require_apple_signing=args.require_apple_signing)
         else:
             cleanup_release(args.root)

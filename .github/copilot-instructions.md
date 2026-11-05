@@ -16,3 +16,6 @@ host tests against the unpacked source-stripped compiled ZIP. Report `not_run`
 separately from `passed`; partial local acceptance is NOT release ready.
 Follow AGENTS.md for fixed free tool4d, licensing, packaging and optional signing.
 Unsigned local acceptance needs no license activation or signing secrets.
+Workflows: CI validates; Publish (Actions → Publish → Run workflow → choose
+patch/minor/major) is the only release path. Never add tag-push or per-version
+release workflows.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build hosted acceptance evidence for the exact final ZIP; never publish or create tags."""
+"""Publish workflow build: compile, package, sign and host-test the exact final ZIP; never publishes."""
 import argparse
 from datetime import datetime, timezone
 import json
@@ -16,7 +16,6 @@ from native_dependencies import inspect
 from package_component import package, unpack_for_test, validate_compile
 from release_assets import (asset_record, check_compile, digest, regular, verify_signing_proof,
                             verify_signed_payload)
-from sign_release import release_policy
 from test_4d import _read_json, test_4d, validate_status
 
 # Adapted from miyako/4d-component-template (MIT), immutable revision
@@ -63,9 +62,8 @@ def accept(root, repository, tool4d, tag=None, require_apple_signing=False):
     try:
         config = load_config(root, initialized=True, repository=repository, tag=tag)
         report["configuration"] = config
-        signing = require_apple_signing or release_policy(root)
+        signing = bool(require_apple_signing)
         report["require_apple_signing"] = signing
-        report["candidate"] = os.environ.get("CANDIDATE_MODE", "").lower() == "true"
         revision = report["commit"]
         if not digest(revision, 40):
             raise ValueError("hosted acceptance requires a source commit")
@@ -197,7 +195,7 @@ def main():
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--repository", required=True)
     parser.add_argument("--tool4d", type=Path, required=True)
-    parser.add_argument("--tag", help="version identity only; no tag is created or published")
+    parser.add_argument("--tag", help="version identity only; no tag is created here")
     parser.add_argument("--require-apple-signing", action="store_true")
     args = parser.parse_args()
     try:
