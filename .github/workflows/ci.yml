@@ -154,7 +154,7 @@ jobs:
           from ci_config import ROOT, load_config
           from package_component import package, unpack_for_test
           config = load_config(initialized=True)
-          archive = package(ROOT, repository=os.environ["GITHUB_REPOSITORY"], tag="v" + config["version"])
+          archive = package(ROOT, repository=os.environ["GITHUB_REPOSITORY"], tag=config["version"])
           component = unpack_for_test(ROOT, archive)
           subprocess.run([sys.executable, "scripts/test_4d.py", "--tool4d",
                           ".tools/tool4d.app/Contents/MacOS/tool4d",

@@ -17,11 +17,11 @@ class ReleaseAssetsTests(HostedFixture, unittest.TestCase):
         self.mocks()
         self.report = self.accept()
         self.evidence = self.archive.with_suffix(".acceptance.json")
-        self.tag = "v" + self.config["version"]
+        self.tag = self.config["version"]
 
     def verify(self, signing=True):
         return assets.verify_assets(self.root, "miyako/" + self.name,
-                                    "v" + self.config["version"], SHA, signing)
+                                    self.config["version"], SHA, signing)
 
     def save_report(self, report):
         self.evidence.write_text(json.dumps(report))
@@ -211,6 +211,16 @@ class ReleaseAssetsTests(HostedFixture, unittest.TestCase):
         self.assertIn("--latest", calls[-1])
         self.assertNotIn("--prerelease", calls[-1])
         self.assertFalse(any("tag" in command[:2] for command in calls))
+
+    def test_legacy_v_tag_verifies_existing_release_but_never_publishes(self):
+        legacy = "v" + self.config["version"]
+        self.change_proof(lambda p: p.update(releaseTag=legacy))
+        assets.verify_assets(self.root, "miyako/" + self.name, legacy, SHA, True)
+        with patch.object(assets, "verify_tag") as tag, patch.object(assets.subprocess, "run") as run:
+            with self.assertRaisesRegex(ValueError, "no v prefix"):
+                assets.publish(self.root, "miyako/" + self.name, legacy, SHA, True)
+        tag.assert_not_called()
+        run.assert_not_called()
 
     def test_remote_tag_movement_blocks_publication(self):
         with patch.object(assets, "verify_tag"), patch.object(

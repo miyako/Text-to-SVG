@@ -10,8 +10,8 @@ import subprocess
 import zipfile
 
 from build_provenance import commit, sha256, source_digest
-from ci_config import ROOT, TARGETS, load_config
-from release_ref import verify as verify_tag
+from ci_config import ROOT, TARGETS, load_config, release_tag_matches
+from release_ref import validate_tag, verify as verify_tag
 from sign_release import release_policy, submission_uuid
 from test_4d import _read_json, validate_status
 
@@ -104,7 +104,7 @@ def verify_signing_proof(root, config, revision, compile_input, unsigned_hash, a
         raise ValueError("signing proof bytes differ from the accepted asset")
     if (not isinstance(proof, dict) or type(proof.get("schema")) is not int or proof["schema"] != 1
             or proof.get("version") != config["version"] or proof.get("sourceSHA") != revision
-            or proof.get("releaseTag") != "v" + config["version"]
+            or not release_tag_matches(proof.get("releaseTag"), config["version"])
             or proof.get("unsignedCompileInputSHA256") != compile_input
             or proof.get("unsignedZIPHashSHA256") != unsigned_hash
             or proof.get("hostValidation") != "required-after-signing"
@@ -341,6 +341,7 @@ def verify_assets(root, repository, tag, revision, apple_signing=False):
 def publish(root, repository, tag, revision, apple_signing=False):
     if os.environ.get("CANDIDATE_MODE", "").lower() == "true":
         raise ValueError("candidate execution cannot publish")
+    validate_tag(tag)  # new releases never use a legacy v-prefixed tag
     assets = verify_assets(root, repository, tag, revision, apple_signing)
     report = _read_json(assets[-1])
     if report.get("candidate") is not False:

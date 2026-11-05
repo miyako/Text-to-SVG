@@ -43,7 +43,7 @@ jobs:
               raise SystemExit("candidate checkout does not match the push revision")
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
               output.write("source_sha=" + sha + "\n")
-              output.write("version_tag=v" + config["version"] + "\n")
+              output.write("version_tag=" + config["version"] + "\n")
 
   candidate:
     needs: gate

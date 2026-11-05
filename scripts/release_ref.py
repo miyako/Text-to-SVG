@@ -10,14 +10,16 @@ import sys
 from ci_config import ROOT, SEMVER
 
 
-def validate_tag(tag):
-    if not isinstance(tag, str) or not re.fullmatch("v" + SEMVER, tag, flags=re.ASCII):
-        raise ValueError("release tag must be v<SemVer>, not a branch or arbitrary ref")
+def validate_tag(tag, *, legacy=False):
+    """New release tags are bare SemVer; ``legacy`` also accepts existing ``v<SemVer>`` tags."""
+    pattern = ("v?" if legacy else "") + SEMVER
+    if not isinstance(tag, str) or not re.fullmatch(pattern, tag, flags=re.ASCII):
+        raise ValueError("release tag must be bare <SemVer> (no v prefix), not a branch or arbitrary ref")
     return tag
 
 
 def tag_commit(root, tag):
-    tag = validate_tag(tag)
+    tag = validate_tag(tag, legacy=True)
     result = subprocess.run(
         ["git", "rev-parse", "--verify", "refs/tags/" + tag + "^{commit}"],
         cwd=root, capture_output=True, text=True, encoding="utf-8", check=False)

@@ -410,7 +410,7 @@ Run the actual stages (example version `0.1.0`, initialized destination only):
 python3 scripts/test_4d.py --root . --tool4d .tools/tool4d.app/Contents/MacOS/tool4d
 python3 scripts/compile_component.py --root . --tool4d .tools/tool4d.app/Contents/MacOS/tool4d
 python3 scripts/package_component.py --root . --repository OWNER/REPOSITORY \
-  --tag v0.1.0 --unpack-test
+  --tag 0.1.0 --unpack-test
 python3 scripts/test_4d.py --root . --tool4d .tools/tool4d.app/Contents/MacOS/tool4d \
   --component build/release-test/REPOSITORY.4dbase
 ```
@@ -468,7 +468,7 @@ failed status/phase reports. This is a starter identity/wiring regression,
 For approved hosted publication only, set Actions **variable**
 `FOURD_ENABLED=true`; `TOOL4D_URL` / `TOOL4D_SHA256` are optional paired overrides
 of the approved public `package.json.tool` pin, not required secrets. Push the matching
-`v<version>` tag. Release jobs build same-tag native resources, compile after
+bare `<version>` tag (e.g. `0.1.2`, `0.2.0-rc.1`; **no `v` prefix**). Release jobs build same-tag native resources, compile after
 assembly and host-test the unpacked package before publishing `<repository>.zip`.
 Only publication receives built-in `GITHUB_TOKEN` write permission; no personal
 token/version-bot commit is required.
@@ -481,7 +481,7 @@ After the dispatch-capable workflow is merged to the **default branch**, open
 compiled-host green.
 
 **Actions → Release compiled component → Run workflow** requires
-`version_tag`, an **already existing** `v<SemVer>` tag matching the initialized
+`version_tag`, an **already existing** bare `<SemVer>` tag (no `v` prefix) matching the initialized
 repository's `template.json.version` / `package.json.version`. It creates no
 tag. The gate resolves/peels that tag to a commit SHA, validates source at that
 SHA, and all reusable native CI, assembly, compilation and publication jobs use
@@ -489,6 +489,10 @@ that exact SHA—not the selected UI branch. Packaging receives the normalized
 tag explicitly. Publication refreshes and verifies the tag has not moved, uses
 `--verify-tag`, and remains blocked by compilation or final host failure.
 Do not manually dispatch publication or create a tag without user permission.
+Release tags are bare SemVer (`X.Y.Z`, `X.Y.Z-rc.N`); never generate a new
+`v`-prefixed tag. Legacy `v0.1.0`/`v0.1.1` tags and releases stay untouched:
+verification (`release_ref.py verify`, `verify-release.yml`) still accepts
+them, while the release trigger/gate and publication accept only bare tags.
 The new workflow is not available in the default template before its PR merges.
 
 ## 7. Report evidence, not assumptions
